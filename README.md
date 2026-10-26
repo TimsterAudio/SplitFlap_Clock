@@ -14,7 +14,9 @@ departures.
 
 ## Using it
 
-Run `splitflap-clock.exe` on Windows or `splitflap-clock` on Linux.
+Download it from [Releases](https://github.com/TimsterAudio/SplitFlap_Clock/releases/latest):
+`splitflap-clock.exe` for Windows, or `splitflap-clock-linux-x86_64` for Linux
+(make it executable with `chmod +x`). Then run it.
 
 - **Right-click** the clock for the menu, or **double-click** it (or use the
   ⚙ in the corner) to open Settings.
@@ -29,6 +31,12 @@ Windows and `~/.local/share/splitflap-clock` on Linux.
 On Linux the program needs an X11 or Wayland desktop with OpenGL, which
 every desktop has. It loads `libxkbcommon` (X11) or the Wayland libraries
 at run time.
+
+## Releasing
+
+Bump `version` in `Cargo.toml` and add its section to `CHANGELOG.md`, then
+push to `main`. The Release workflow creates the `vX.Y.Z` tag and the release
+with both downloads.
 
 ## Building
 

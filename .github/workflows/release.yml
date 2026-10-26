@@ -1,0 +1,102 @@
+# Publishes a GitHub release whenever main carries a version (from
+# Cargo.toml) that hasn't been released yet. Bump the version, add its
+# section to CHANGELOG.md, push to main: the release `vX.Y.Z` appears with
+# the Windows exe and the Linux binary, and that section as its notes.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - CHANGELOG.md
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      exists: ${{ steps.v.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          if gh release view "v$ver" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v$ver is already released."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: version
+    if: needs.version.outputs.exists == 'false'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            from: target/release/splitflap-clock
+            to: splitflap-clock-linux-x86_64
+          - os: windows-latest
+            from: target/release/splitflap-clock.exe
+            to: splitflap-clock.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - shell: bash
+        run: mkdir dist && cp "${{ matrix.from }}" "dist/${{ matrix.to }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.os }}
+          path: dist/*
+          retention-days: 7
+
+  publish:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'false'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          merge-multiple: true
+          path: dist
+      - name: Release notes from CHANGELOG.md
+        run: |
+          ver="${{ needs.version.outputs.version }}"
+          awk -v v="$ver" 'index($0, "## " v " ") == 1 {f=1; next} f && /^## / {exit} f' CHANGELOG.md > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ## Downloads
+
+          - **Windows**: `splitflap-clock.exe`. Download it and run it; nothing to install.
+          - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
+          NOTES
+          cat notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.version.outputs.version }}"
+          chmod +x dist/splitflap-clock-linux-x86_64
+          gh release create "v$ver" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Split-Flap Clock $ver" \
+            --notes-file notes.md
