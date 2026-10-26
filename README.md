@@ -1,0 +1,55 @@
+# Split-Flap Clock
+
+A desktop clock that looks like the split-flap departure boards of old
+airports and railway stations. Each digit is a card that folds over when it
+changes, and the board can list other time zones below the local time, like
+departures.
+
+- Big split-flap display of the local time, with a small date line under it
+- Yellow or white digits on black
+- 12- or 24-hour time, with seconds if you want them
+- Up to ten other time zones, each with its own name, time and day
+- Keep on top, and an optional frameless window to sit on the desktop
+- One file: no installer, no runtime, nothing downloaded while it runs
+
+## Using it
+
+Run `splitflap-clock.exe` on Windows or `splitflap-clock` on Linux.
+
+- **Right-click** the clock for the menu, or **double-click** it (or use the
+  ⚙ in the corner) to open Settings.
+- **Drag** the face to move the window. Resize the window, or use the Size
+  slider in Settings; the board keeps its shape.
+- Add time zones in Settings by searching for a city, such as `Tokyo` or
+  `New York`. Edit the name shown on the board, and move zones up and down.
+
+Settings are saved when the clock closes: in `%APPDATA%\splitflap-clock` on
+Windows and `~/.local/share/splitflap-clock` on Linux.
+
+On Linux the program needs an X11 or Wayland desktop with OpenGL, which
+every desktop has. It loads `libxkbcommon` (X11) or the Wayland libraries
+at run time.
+
+## Building
+
+```sh
+cargo build --release                                     # Linux
+cargo build --release --target x86_64-pc-windows-gnu      # Windows, from Linux with MinGW
+```
+
+On Windows itself, `cargo build --release` builds the exe. The binary is in
+`target/release/` (or `target/<target>/release/`).
+
+Checks:
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+## Credits
+
+The board lettering is Barlow Condensed SemiBold by The Barlow Project
+Authors, under the SIL Open Font License (`assets/OFL.txt`). It is built
+into the binary.
