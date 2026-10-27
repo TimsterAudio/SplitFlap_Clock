@@ -119,7 +119,7 @@ pub struct Flap {
     queue: VecDeque<String>,
     start: f64,
     dur: f64,
-    /// No flipping before this time, so a row of new cards can ripple.
+    /// No flipping before this time, so cards set off a moment apart.
     hold: f64,
     /// How long this card's quick flips take, as a share of the usual: no
     /// two mechanisms on a real board run at quite the same speed.
@@ -127,8 +127,9 @@ pub struct Flap {
 }
 
 impl Flap {
-    /// A blank card that starts flipping `delay` seconds after `now`.
-    pub fn new(drum: Drum, now: f64, delay: f64) -> Self {
+    /// A blank card that starts flipping `delay` seconds after `now`, its
+    /// quick flips taking `pace` times as long as usual.
+    pub fn new(drum: Drum, now: f64, delay: f64, pace: f64) -> Self {
         Self {
             drum,
             prev: " ".into(),
@@ -138,7 +139,7 @@ impl Flap {
             start: 0.0,
             dur: 0.0,
             hold: now + delay,
-            pace: 1.0,
+            pace,
         }
     }
 
@@ -356,7 +357,7 @@ mod tests {
 
     #[test]
     fn a_card_lands_on_its_target() {
-        let mut f = Flap::new(Drum::Alpha, 0.0, 0.0);
+        let mut f = Flap::new(Drum::Alpha, 0.0, 0.0, 1.0);
         f.set("C");
         let mut t = 0.0;
         while f.busy(t) || t == 0.0 {

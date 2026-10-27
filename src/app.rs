@@ -527,8 +527,12 @@ impl ClockApp {
             if have != want {
                 *flaps = want
                     .iter()
-                    .enumerate()
-                    .map(|(k, d)| d.map(|d| Flap::new(d, time, ripple(i, k))))
+                    .map(|d| {
+                        d.map(|d| {
+                            let (delay, pace) = self.rng.scatter();
+                            Flap::new(d, time, delay, pace)
+                        })
+                    })
                     .collect();
             }
 
@@ -539,11 +543,7 @@ impl ClockApp {
                     } => {
                         let flap = flaps[k].as_mut().expect("a card for every card cell");
                         if refresh {
-                            // Every card gets the word at once, as on a real
-                            // board, but each starts a moment apart and runs
-                            // at its own speed.
-                            let delay = self.rng.between(0.0, 0.9);
-                            let pace = self.rng.between(0.8, 1.25);
+                            let (delay, pace) = self.rng.scatter();
                             flap.turn(text, time, delay, pace);
                         } else {
                             flap.set(text);
@@ -903,12 +903,14 @@ impl Rng {
         self.0 = x;
         lo + (hi - lo) * ((x >> 11) as f64 / (1u64 << 53) as f64)
     }
-}
 
-/// When a card starts to move in a ripple across the board: line by line,
-/// and left to right along each line.
-fn ripple(line: usize, card: usize) -> f64 {
-    0.12 * line as f64 + 0.035 * card as f64
+    /// When a card sets off, in seconds from now, and how long its quick
+    /// flips take as a share of the usual. Every card on a real board gets
+    /// the word at once, but each starts a moment apart and runs at its own
+    /// speed.
+    fn scatter(&mut self) -> (f64, f64) {
+        (self.between(0.0, 0.9), self.between(0.8, 1.25))
+    }
 }
 
 fn install_fonts(ctx: &egui::Context) {

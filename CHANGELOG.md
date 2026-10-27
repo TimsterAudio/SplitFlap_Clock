@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.1 – 2026-10-27
+
+- The clock starts up the same way a refresh looks: the cards set off a moment apart, each at its own speed, and settle in any order instead of sweeping across the board. Cards that appear later, such as for a newly added time zone, do the same.
+
 ## 0.3.0 – 2026-10-27
 
 - **At random** refreshes: the board refreshes after a random wait, between two times you choose in Settings (10 to 60 minutes apart to start with).
