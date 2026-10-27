@@ -133,7 +133,7 @@ impl Clatter {
     /// Adds the clicks under way to `out`, interleaved stereo, at `volume`.
     pub fn render(&mut self, out: &mut [f32], volume: f32) {
         let life = (LIFE * self.rate) as u32;
-        for frame in out.chunks_exact_mut(2) {
+        for frame in out.as_chunks_mut::<2>().0 {
             let (mut l, mut r) = (0.0, 0.0);
             for i in 0..VOICES {
                 if !self.voices[i].live {
