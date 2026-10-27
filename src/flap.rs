@@ -121,6 +121,9 @@ pub struct Flap {
     dur: f64,
     /// No flipping before this time, so a row of new cards can ripple.
     hold: f64,
+    /// How long this card's quick flips take, as a share of the usual: no
+    /// two mechanisms on a real board run at quite the same speed.
+    pace: f64,
 }
 
 impl Flap {
@@ -135,6 +138,7 @@ impl Flap {
             start: 0.0,
             dur: 0.0,
             hold: now + delay,
+            pace: 1.0,
         }
     }
 
@@ -148,14 +152,17 @@ impl Flap {
         }
         self.target = target.to_string();
         self.queue = self.drum.steps(&self.cur, target).into();
+        self.pace = 1.0;
     }
 
     /// Spins the card once round its drum, starting `delay` seconds after
-    /// `now`, and lands it on `target`.
-    pub fn turn(&mut self, target: &str, now: f64, delay: f64) {
+    /// `now` with its quick flips taking `pace` times as long as usual, and
+    /// lands it on `target`.
+    pub fn turn(&mut self, target: &str, now: f64, delay: f64, pace: f64) {
         self.target = target.to_string();
         self.queue = self.drum.turn(&self.cur, target).into();
         self.hold = self.hold.max(now + delay);
+        self.pace = pace;
     }
 
     fn progress(&self, now: f64) -> f32 {
@@ -174,7 +181,11 @@ impl Flap {
         if let Some(next) = self.queue.pop_front() {
             self.prev = std::mem::replace(&mut self.cur, next);
             self.start = now;
-            self.dur = if self.queue.is_empty() { FLIP } else { FAST };
+            self.dur = if self.queue.is_empty() {
+                FLIP
+            } else {
+                FAST * self.pace
+            };
         }
     }
 

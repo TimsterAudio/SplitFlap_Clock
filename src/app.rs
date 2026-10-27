@@ -47,14 +47,17 @@ pub enum Refresh {
     Half,
     #[default]
     Hourly,
+    /// At a random time, within the range in [`Saved::random_minutes`].
+    Random,
 }
 
 impl Refresh {
-    const ALL: [Refresh; 4] = [
+    const ALL: [Refresh; 5] = [
         Refresh::Off,
         Refresh::Quarter,
         Refresh::Half,
         Refresh::Hourly,
+        Refresh::Random,
     ];
 
     fn minutes(self) -> Option<i64> {
@@ -63,6 +66,7 @@ impl Refresh {
             Refresh::Quarter => Some(15),
             Refresh::Half => Some(30),
             Refresh::Hourly => Some(60),
+            Refresh::Random => None,
         }
     }
 
@@ -72,6 +76,7 @@ impl Refresh {
             Refresh::Quarter => "Every 15 minutes",
             Refresh::Half => "Every 30 minutes",
             Refresh::Hourly => "Every hour",
+            Refresh::Random => "At random",
         }
     }
 }
@@ -91,6 +96,8 @@ pub struct Saved {
     pub zones: Vec<Zone>,
     pub refresh: Refresh,
     pub all_desktops: bool,
+    /// The shortest and longest wait, in minutes, between random refreshes.
+    pub random_minutes: (u32, u32),
 }
 
 impl Default for Saved {
@@ -106,6 +113,7 @@ impl Default for Saved {
             zones: Vec::new(),
             refresh: Refresh::Hourly,
             all_desktops: false,
+            random_minutes: (10, 60),
         }
     }
 }
@@ -269,7 +277,10 @@ pub struct ClockApp {
     autostart_error: Option<String>,
     /// The refresh interval and the slot of it the clock is in.
     refresh_slot: Option<(i64, i64)>,
+    /// When the next random refresh is due, and the range it was drawn from.
+    next_random: Option<(f64, (u32, u32))>,
     refresh_now: bool,
+    rng: Rng,
     /// The board size the window was last fitted to.
     fitted: Option<Vec2>,
     last_window: Vec2,
@@ -295,7 +306,9 @@ impl ClockApp {
             autostart: autostart::enabled(),
             autostart_error: None,
             refresh_slot: None,
+            next_random: None,
             refresh_now: false,
+            rng: Rng::seeded(),
             fitted: None,
             last_window: Vec2::ZERO,
             resized_at: 0.0,
@@ -416,8 +429,25 @@ impl ClockApp {
     }
 
     /// Whether the board is due a refresh: on the hour for an hourly one,
-    /// on the quarter hours for every 15 minutes, by the local clock.
-    fn refresh_due(&mut self) -> bool {
+    /// on the quarter hours for every 15 minutes, by the local clock, or
+    /// after a random wait.
+    fn refresh_due(&mut self, time: f64) -> bool {
+        if self.saved.refresh == Refresh::Random {
+            self.refresh_slot = None;
+            let (lo, hi) = self.saved.random_minutes;
+            let range = (lo.min(hi).max(1), hi.max(lo).max(1));
+            let due = match self.next_random {
+                Some((at, r)) if r == range => time >= at,
+                // Nothing drawn yet, or the range has changed: draw afresh.
+                _ => false,
+            };
+            if due || self.next_random.is_none_or(|(_, r)| r != range) {
+                let wait = 60.0 * self.rng.between(range.0 as f64, range.1 as f64);
+                self.next_random = Some((time + wait, range));
+            }
+            return due;
+        }
+        self.next_random = None;
         let Some(every) = self.saved.refresh.minutes() else {
             self.refresh_slot = None;
             return false;
@@ -448,7 +478,7 @@ impl ClockApp {
         let u = |x: f32, y: f32| origin + vec2(x, y) * scale;
 
         let look = self.look();
-        let refresh = self.refresh_due() | std::mem::take(&mut self.refresh_now);
+        let refresh = self.refresh_due(time) | std::mem::take(&mut self.refresh_now);
         let mut busy = false;
         let mut y = PAD;
         let mut first_zone = true;
@@ -509,7 +539,12 @@ impl ClockApp {
                     } => {
                         let flap = flaps[k].as_mut().expect("a card for every card cell");
                         if refresh {
-                            flap.turn(text, time, ripple(i, k));
+                            // Every card gets the word at once, as on a real
+                            // board, but each starts a moment apart and runs
+                            // at its own speed.
+                            let delay = self.rng.between(0.0, 0.9);
+                            let pace = self.rng.between(0.8, 1.25);
+                            flap.turn(text, time, delay, pace);
                         } else {
                             flap.set(text);
                         }
@@ -664,6 +699,22 @@ impl ClockApp {
                     .response
                     .on_hover_text("Every card spins round once, like a real board refreshing");
                 ui.end_row();
+                if s.refresh == Refresh::Random {
+                    ui.label("");
+                    ui.horizontal(|ui| {
+                        let (lo, hi) = &mut s.random_minutes;
+                        ui.label("Between");
+                        if ui.add(egui::DragValue::new(lo).range(1..=720)).changed() {
+                            *hi = (*hi).max(*lo);
+                        }
+                        ui.label("and");
+                        if ui.add(egui::DragValue::new(hi).range(1..=720)).changed() {
+                            *lo = (*lo).min(*hi);
+                        }
+                        ui.label("minutes apart");
+                    });
+                    ui.end_row();
+                }
                 ui.label("Window");
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut s.on_top, "Keep on top");
@@ -830,6 +881,30 @@ impl eframe::App for ClockApp {
     }
 }
 
+/// A small random number source for the refreshes; nothing here needs
+/// more than xorshift.
+struct Rng(u64);
+
+impl Rng {
+    fn seeded() -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0x9E37_79B9_7F4A_7C15);
+        Self(nanos | 1)
+    }
+
+    /// A number from `lo` up to `hi`.
+    fn between(&mut self, lo: f64, hi: f64) -> f64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        lo + (hi - lo) * ((x >> 11) as f64 / (1u64 << 53) as f64)
+    }
+}
+
 /// When a card starts to move in a ripple across the board: line by line,
 /// and left to right along each line.
 fn ripple(line: usize, card: usize) -> f64 {
@@ -871,6 +946,15 @@ mod tests {
         assert_eq!(texts(&time_cells(0, 30, None, false, true)), "12:30_AM");
         assert_eq!(texts(&time_cells(13, 0, None, false, true)), " 1:00_PM");
         assert_eq!(texts(&time_cells(12, 0, None, false, true)), "12:00_PM");
+    }
+
+    #[test]
+    fn random_numbers_stay_in_range() {
+        let mut rng = Rng(12345);
+        let draws: Vec<f64> = (0..1000).map(|_| rng.between(10.0, 60.0)).collect();
+        assert!(draws.iter().all(|&x| (10.0..60.0).contains(&x)));
+        // Spread across the range, not bunched at one end.
+        assert!(draws.iter().any(|&x| x < 20.0) && draws.iter().any(|&x| x > 50.0));
     }
 
     #[test]

@@ -9,7 +9,7 @@ departures.
 - Yellow or white digits on black
 - 12- or 24-hour time, with seconds if you want them
 - Up to ten other time zones, each with its own name, time and day
-- The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default)
+- The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
 - Can start when you log in
 - One file: no installer, no runtime, nothing downloaded while it runs

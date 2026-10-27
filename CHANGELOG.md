@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.0 – 2026-10-27
+
+- **At random** refreshes: the board refreshes after a random wait, between two times you choose in Settings (10 to 60 minutes apart to start with).
+- A refresh looks more like the real thing. Every card starts a moment apart and runs at its own speed, so the board scrambles and settles card by card instead of sweeping from top left to bottom right.
+
 ## 0.2.0 – 2026-10-27
 
 - The board refreshes: every hour on the hour, each card spins once round its drum and lands back where it was, rippling across the board like a real departure board. Choose every 15 or 30 minutes, every hour or never in Settings, or pick **Refresh the board** from the right-click menu.
