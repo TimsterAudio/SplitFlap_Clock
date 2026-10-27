@@ -11,6 +11,7 @@ use egui::{
 use serde::{Deserialize, Serialize};
 
 use crate::flap::{Drum, Flap, Look};
+use crate::{autostart, desktops};
 
 /// The longest zone name a row has cards for.
 pub const NAME_CARDS: usize = 12;
@@ -37,6 +38,44 @@ pub struct Zone {
     pub label: String,
 }
 
+/// How often every card on the board spins round once, as a real board
+/// does when it refreshes.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Refresh {
+    Off,
+    Quarter,
+    Half,
+    #[default]
+    Hourly,
+}
+
+impl Refresh {
+    const ALL: [Refresh; 4] = [
+        Refresh::Off,
+        Refresh::Quarter,
+        Refresh::Half,
+        Refresh::Hourly,
+    ];
+
+    fn minutes(self) -> Option<i64> {
+        match self {
+            Refresh::Off => None,
+            Refresh::Quarter => Some(15),
+            Refresh::Half => Some(30),
+            Refresh::Hourly => Some(60),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Refresh::Off => "Never",
+            Refresh::Quarter => "Every 15 minutes",
+            Refresh::Half => "Every 30 minutes",
+            Refresh::Hourly => "Every hour",
+        }
+    }
+}
+
 /// What the clock remembers between runs. New fields need a default so
 /// older saves still load.
 #[derive(Clone, Serialize, Deserialize)]
@@ -50,6 +89,8 @@ pub struct Saved {
     pub frameless: bool,
     pub scale: f32,
     pub zones: Vec<Zone>,
+    pub refresh: Refresh,
+    pub all_desktops: bool,
 }
 
 impl Default for Saved {
@@ -63,6 +104,8 @@ impl Default for Saved {
             frameless: false,
             scale: 1.0,
             zones: Vec::new(),
+            refresh: Refresh::Hourly,
+            all_desktops: false,
         }
     }
 }
@@ -219,6 +262,14 @@ pub struct ClockApp {
     /// The window state last asked of the system.
     applied_on_top: Option<bool>,
     applied_frameless: Option<bool>,
+    applied_all_desktops: bool,
+    desktops_error: Option<String>,
+    /// Whether the clock starts at login, as the system has it.
+    autostart: bool,
+    autostart_error: Option<String>,
+    /// The refresh interval and the slot of it the clock is in.
+    refresh_slot: Option<(i64, i64)>,
+    refresh_now: bool,
     /// The board size the window was last fitted to.
     fitted: Option<Vec2>,
     last_window: Vec2,
@@ -239,6 +290,12 @@ impl ClockApp {
             search: String::new(),
             applied_on_top: None,
             applied_frameless: None,
+            applied_all_desktops: false,
+            desktops_error: None,
+            autostart: autostart::enabled(),
+            autostart_error: None,
+            refresh_slot: None,
+            refresh_now: false,
             fitted: None,
             last_window: Vec2::ZERO,
             resized_at: 0.0,
@@ -358,6 +415,23 @@ impl ClockApp {
         self.resized_at = time;
     }
 
+    /// Whether the board is due a refresh: on the hour for an hourly one,
+    /// on the quarter hours for every 15 minutes, by the local clock.
+    fn refresh_due(&mut self) -> bool {
+        let Some(every) = self.saved.refresh.minutes() else {
+            self.refresh_slot = None;
+            return false;
+        };
+        let now = chrono::Local::now();
+        let minute = (now.timestamp() + i64::from(now.offset().local_minus_utc())).div_euclid(60);
+        let slot = (every, minute.div_euclid(every));
+        let due = self
+            .refresh_slot
+            .is_some_and(|(e, n)| e == every && n != slot.1);
+        self.refresh_slot = Some(slot);
+        due
+    }
+
     fn board(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         let time = ctx.input(|i| i.time);
@@ -374,6 +448,7 @@ impl ClockApp {
         let u = |x: f32, y: f32| origin + vec2(x, y) * scale;
 
         let look = self.look();
+        let refresh = self.refresh_due() | std::mem::take(&mut self.refresh_now);
         let mut busy = false;
         let mut y = PAD;
         let mut first_zone = true;
@@ -423,7 +498,7 @@ impl ClockApp {
                 *flaps = want
                     .iter()
                     .enumerate()
-                    .map(|(k, d)| d.map(|d| Flap::new(d, time, 0.12 * i as f64 + 0.035 * k as f64)))
+                    .map(|(k, d)| d.map(|d| Flap::new(d, time, ripple(i, k))))
                     .collect();
             }
 
@@ -433,7 +508,11 @@ impl ClockApp {
                         text, size, font, ..
                     } => {
                         let flap = flaps[k].as_mut().expect("a card for every card cell");
-                        flap.set(text);
+                        if refresh {
+                            flap.turn(text, time, ripple(i, k));
+                        } else {
+                            flap.set(text);
+                        }
                         flap.tick(time);
                         busy |= flap.busy(time);
                         // Cards sit on the line's baseline.
@@ -486,6 +565,16 @@ impl ClockApp {
                 .checkbox(&mut self.saved.frameless, "Hide title bar")
                 .changed()
             {
+                ui.close();
+            }
+            if ui
+                .checkbox(&mut self.saved.all_desktops, "Show on all desktops")
+                .changed()
+            {
+                ui.close();
+            }
+            if ui.button("Refresh the board").clicked() {
+                self.refresh_now = true;
                 ui.close();
             }
             ui.separator();
@@ -564,10 +653,55 @@ impl ClockApp {
                     ui.checkbox(&mut s.date, "Date");
                 });
                 ui.end_row();
+                ui.label("Refresh");
+                egui::ComboBox::from_id_salt("refresh")
+                    .selected_text(s.refresh.label())
+                    .show_ui(ui, |ui| {
+                        for r in Refresh::ALL {
+                            ui.selectable_value(&mut s.refresh, r, r.label());
+                        }
+                    })
+                    .response
+                    .on_hover_text("Every card spins round once, like a real board refreshing");
+                ui.end_row();
                 ui.label("Window");
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut s.on_top, "Keep on top");
                     ui.checkbox(&mut s.frameless, "Hide title bar");
+                });
+                ui.end_row();
+                ui.label("");
+                ui.vertical(|ui| {
+                    ui.checkbox(&mut s.all_desktops, "Show on all desktops");
+                    if cfg!(windows) && s.all_desktops {
+                        ui.label(
+                            egui::RichText::new(
+                                "The clock has no taskbar button while this is on.",
+                            )
+                            .weak()
+                            .small(),
+                        );
+                    }
+                    if let Some(e) = &self.desktops_error {
+                        ui.colored_label(ui.visuals().warn_fg_color, e);
+                    }
+                });
+                ui.end_row();
+                ui.label("Start");
+                ui.vertical(|ui| {
+                    let mut on = self.autostart;
+                    if ui.checkbox(&mut on, "Start when I log in").changed() {
+                        match autostart::set(on) {
+                            Ok(()) => {
+                                self.autostart = on;
+                                self.autostart_error = None;
+                            }
+                            Err(e) => self.autostart_error = Some(e),
+                        }
+                    }
+                    if let Some(e) = &self.autostart_error {
+                        ui.colored_label(ui.visuals().warn_fg_color, e);
+                    }
                 });
                 ui.end_row();
                 ui.label("Size");
@@ -667,9 +801,20 @@ impl ClockApp {
 }
 
 impl eframe::App for ClockApp {
-    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_window(&ctx);
+        // Window managers only take these requests once the window is up.
+        let on = self.saved.all_desktops;
+        if ctx.input(|i| i.time) > 1.0 {
+            let changed = self.applied_all_desktops != on;
+            self.applied_all_desktops = on;
+            if let Err(e) = desktops::apply(frame, on, changed) {
+                self.desktops_error = Some(e);
+            } else if changed {
+                self.desktops_error = None;
+            }
+        }
         self.board(ui);
         if self.settings_open {
             self.settings(&ctx);
@@ -683,6 +828,12 @@ impl eframe::App for ClockApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BOARD.to_normalized_gamma_f32()
     }
+}
+
+/// When a card starts to move in a ripple across the board: line by line,
+/// and left to right along each line.
+fn ripple(line: usize, card: usize) -> f64 {
+    0.12 * line as f64 + 0.035 * card as f64
 }
 
 fn install_fonts(ctx: &egui::Context) {

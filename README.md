@@ -9,7 +9,9 @@ departures.
 - Yellow or white digits on black
 - 12- or 24-hour time, with seconds if you want them
 - Up to ten other time zones, each with its own name, time and day
-- Keep on top, and an optional frameless window to sit on the desktop
+- The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default)
+- Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
+- Can start when you log in
 - One file: no installer, no runtime, nothing downloaded while it runs
 
 ## Using it
@@ -25,12 +27,19 @@ Download it from [Releases](https://github.com/TimsterAudio/SplitFlap_Clock/rele
 - Add time zones in Settings by searching for a city, such as `Tokyo` or
   `New York`. Edit the name shown on the board, and move zones up and down.
 
+**Start when I log in** adds the clock to the Windows Run list (it shows in
+Task Manager's Startup apps) or writes `~/.config/autostart/splitflap-clock.desktop`
+on Linux. **Show on all desktops** works on Windows 10 and 11 virtual desktops,
+where it also hides the taskbar button, and on Linux desktops with workspaces.
+
 Settings are saved when the clock closes: in `%APPDATA%\splitflap-clock` on
 Windows and `~/.local/share/splitflap-clock` on Linux.
 
 On Linux the program needs an X11 or Wayland desktop with OpenGL, which
-every desktop has. It loads `libxkbcommon` (X11) or the Wayland libraries
-at run time.
+every desktop has. It runs as an X11 window wherever X11 is there (on
+Wayland desktops through XWayland), since Wayland doesn't let apps stay on
+top or on every workspace. It loads `libxkbcommon` (X11) or the Wayland
+libraries at run time.
 
 ## Releasing
 

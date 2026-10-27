@@ -85,6 +85,17 @@ impl Drum {
             i = (i + 1) % self.len();
         }
     }
+
+    /// One whole turn of the drum from `from`, then on to `to`: what a
+    /// card does when the board refreshes.
+    pub fn turn(self, from: &str, to: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(a) = self.index(from) {
+            out.extend((1..=self.len()).map(|k| self.symbol((a + k) % self.len()).to_string()));
+        }
+        out.extend(self.steps(from, to));
+        out
+    }
 }
 
 /// The colours a card is drawn in.
@@ -137,6 +148,14 @@ impl Flap {
         }
         self.target = target.to_string();
         self.queue = self.drum.steps(&self.cur, target).into();
+    }
+
+    /// Spins the card once round its drum, starting `delay` seconds after
+    /// `now`, and lands it on `target`.
+    pub fn turn(&mut self, target: &str, now: f64, delay: f64) {
+        self.target = target.to_string();
+        self.queue = self.drum.turn(&self.cur, target).into();
+        self.hold = self.hold.max(now + delay);
     }
 
     fn progress(&self, now: f64) -> f32 {
@@ -302,6 +321,15 @@ mod tests {
         assert_eq!(Drum::Tens6.steps("5", "0"), ["0"]);
         assert_eq!(Drum::Alpha.steps("B", "E"), ["C", "D", "E"]);
         assert!(Drum::Digit.steps("7", "7").is_empty());
+    }
+
+    #[test]
+    fn a_refresh_turns_the_whole_drum() {
+        assert_eq!(Drum::Tens3.turn("1", "1"), ["2", "0", "1"]);
+        assert_eq!(Drum::Tens3.turn("1", "2"), ["2", "0", "1", "2"]);
+        assert_eq!(Drum::Alpha.turn("A", "A").len(), Drum::Alpha.len());
+        // A card that is still blank just comes round to its symbol.
+        assert_eq!(Drum::Digit.turn(" ", "1"), ["0", "1"]);
     }
 
     #[test]

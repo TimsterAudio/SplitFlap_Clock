@@ -2188,15 +2188,19 @@ dependencies = [
 
 [[package]]
 name = "splitflap-clock"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "chrono-tz",
  "eframe",
  "egui",
+ "raw-window-handle",
  "ron",
  "serde",
+ "windows-sys 0.61.2",
+ "winit",
  "winresource",
+ "x11rb",
 ]
 
 [[package]]
