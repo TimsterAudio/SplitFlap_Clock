@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.1-powernct – 2026-10-27 (a build for one user, not released)
+
+- Colours can be pasted: next to every colour button is a box showing the colour as `#RRGGBB`. Type or paste a colour into it as `#RRGGBB`, `#RGB`, or `R, G, B`, which is what the picker's copy button gives.
+
 ## 0.5.0-powernct – 2026-10-27 (a build for one user, not released)
 
 - **No limit on places**, and an **Add** button: search for a time zone, pick it from the list (or take the best match) and press Add or Enter. The window never grows past the screen; the board shrinks to fit.

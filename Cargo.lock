@@ -2335,7 +2335,7 @@ dependencies = [
 
 [[package]]
 name = "splitflap-clock"
-version = "0.5.0-powernct"
+version = "0.5.1-powernct"
 dependencies = [
  "chrono",
  "chrono-tz",

@@ -915,10 +915,10 @@ impl ClockApp {
                         Ink::White => WHITE,
                     };
                     ui.label("Time");
-                    colour_choice(ui, &mut s.time_colour, ink);
+                    colour_choice(ui, "time", &mut s.time_colour, ink);
                     ui.add_space(8.0);
                     ui.label("Date");
-                    colour_choice(ui, &mut s.date_colour, ink);
+                    colour_choice(ui, "date", &mut s.date_colour, ink);
                 });
                 ui.end_row();
                 ui.label("Hours");
@@ -1128,7 +1128,7 @@ impl ClockApp {
                     );
                     ui.add_space(8.0);
                     ui.label("Colour");
-                    colour_choice(ui, &mut z.colour, board_ink);
+                    colour_choice(ui, ("place", i), &mut z.colour, board_ink);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Time");
@@ -1260,12 +1260,43 @@ impl eframe::App for ClockApp {
     }
 }
 
-/// A colour button for something that can have its own colour, with a way
-/// back to the board's.
-fn colour_choice(ui: &mut Ui, value: &mut Option<[u8; 3]>, board: Color32) {
+/// A colour button for something that can have its own colour, with a box
+/// to type or paste a colour into, and a way back to the board's colour.
+/// The picker's own copy button gives "R, G, B", which the box takes too.
+fn colour_choice(
+    ui: &mut Ui,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &mut Option<[u8; 3]>,
+    board: Color32,
+) {
     let mut c = value.unwrap_or([board.r(), board.g(), board.b()]);
     if egui::color_picker::color_edit_button_srgb(ui, &mut c).changed() {
         *value = Some(c);
+    }
+    // While the box is being typed in, it keeps what was typed; otherwise
+    // it shows the colour.
+    let id = ui.id().with(&salt).with("hex");
+    let mut text = ui
+        .data_mut(|d| d.get_temp::<String>(id))
+        .unwrap_or_else(|| hex(value.unwrap_or(c)));
+    let r = ui
+        .add(
+            egui::TextEdit::singleline(&mut text)
+                .id_salt((&salt, "hex box"))
+                .desired_width(66.0)
+                .font(egui::TextStyle::Monospace)
+                .hint_text("#RRGGBB"),
+        )
+        .on_hover_text("Type or paste a colour: #RRGGBB, #RGB, or R, G, B");
+    if r.changed() {
+        if let Some(p) = parse_colour(&text) {
+            *value = Some(p);
+        }
+    }
+    if r.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, text));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
     }
     if value.is_some()
         && ui
@@ -1274,6 +1305,39 @@ fn colour_choice(ui: &mut Ui, value: &mut Option<[u8; 3]>, board: Color32) {
             .clicked()
     {
         *value = None;
+    }
+}
+
+fn hex(c: [u8; 3]) -> String {
+    format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+}
+
+/// A colour as people write it: `#RRGGBB` or `#RGB`, with or without the
+/// `#`, or three numbers from 0 to 255, as in `255, 136, 0` or
+/// `rgb(255, 136, 0)`.
+fn parse_colour(text: &str) -> Option<[u8; 3]> {
+    let t = text.trim();
+    if t.contains(',') {
+        let nums: Vec<u8> = t
+            .trim_start_matches("rgb")
+            .trim_matches(|c| c == '(' || c == ')')
+            .split(',')
+            .map(|n| n.trim().parse().ok())
+            .collect::<Option<_>>()?;
+        return <[u8; 3]>::try_from(nums).ok();
+    }
+    let h = t.trim_start_matches('#');
+    if !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |s: &str| u8::from_str_radix(s, 16).ok();
+    match h.len() {
+        6 => Some([byte(&h[0..2])?, byte(&h[2..4])?, byte(&h[4..6])?]),
+        3 => {
+            let d = |i: usize| byte(&h[i..=i]).map(|v| v * 17);
+            Some([d(0)?, d(1)?, d(2)?])
+        }
+        _ => None,
     }
 }
 
@@ -1380,6 +1444,22 @@ mod tests {
         assert_eq!(region_order(&s), ["", "ASIA", "EUROPE"]);
         assert_eq!(names(&s)[0], (None, "UTC".into()));
         assert_eq!(names(&s)[1], (asia, "Asia/Tokyo".into()));
+    }
+
+    #[test]
+    fn colours_paste_in_any_usual_form() {
+        let orange = Some([255, 136, 0]);
+        assert_eq!(parse_colour("#FF8800"), orange);
+        assert_eq!(parse_colour(" ff8800 "), orange);
+        assert_eq!(parse_colour("#f80"), orange);
+        // What the picker's copy button gives.
+        assert_eq!(parse_colour("255, 136, 0"), orange);
+        assert_eq!(parse_colour("rgb(255,136,0)"), orange);
+        assert_eq!(parse_colour("#FF88"), None);
+        assert_eq!(parse_colour("256, 0, 0"), None);
+        assert_eq!(parse_colour("1, 2"), None);
+        assert_eq!(parse_colour("orange"), None);
+        assert_eq!(hex([255, 136, 0]), "#FF8800");
     }
 
     #[test]
