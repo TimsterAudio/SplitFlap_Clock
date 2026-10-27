@@ -108,6 +108,15 @@ pub struct Look {
     pub ink: Color32,
 }
 
+/// A flap that has just fallen, for the sound.
+#[derive(Clone, Copy, Debug)]
+pub struct Fall {
+    /// The last flip, onto the symbol the card was after.
+    pub land: bool,
+    /// Part of a start-up or a refresh, rather than the time moving on.
+    pub show: bool,
+}
+
 pub struct Flap {
     drum: Drum,
     /// What the card showed before the flip under way.
@@ -124,6 +133,8 @@ pub struct Flap {
     /// How long this card's quick flips take, as a share of the usual: no
     /// two mechanisms on a real board run at quite the same speed.
     pace: f64,
+    /// Whether the flips under way are a start-up or a refresh.
+    show: bool,
 }
 
 impl Flap {
@@ -140,6 +151,7 @@ impl Flap {
             dur: 0.0,
             hold: now + delay,
             pace,
+            show: true,
         }
     }
 
@@ -164,6 +176,7 @@ impl Flap {
         self.queue = self.drum.turn(&self.cur, target).into();
         self.hold = self.hold.max(now + delay);
         self.pace = pace;
+        self.show = true;
     }
 
     fn progress(&self, now: f64) -> f32 {
@@ -174,20 +187,26 @@ impl Flap {
         }
     }
 
-    /// Moves the card on to its next flap when the current flip is done.
-    pub fn tick(&mut self, now: f64) {
+    /// Moves the card on to its next flap when the current flip is done,
+    /// and says so.
+    pub fn tick(&mut self, now: f64) -> Option<Fall> {
         if now < self.hold || self.progress(now) < 1.0 {
-            return;
+            return None;
         }
-        if let Some(next) = self.queue.pop_front() {
-            self.prev = std::mem::replace(&mut self.cur, next);
-            self.start = now;
-            self.dur = if self.queue.is_empty() {
-                FLIP
-            } else {
-                FAST * self.pace
-            };
+        let next = self.queue.pop_front()?;
+        self.prev = std::mem::replace(&mut self.cur, next);
+        self.start = now;
+        let land = self.queue.is_empty();
+        self.dur = if land { FLIP } else { FAST * self.pace };
+        let fall = Fall {
+            land,
+            show: self.show,
+        };
+        if land {
+            // From here on, changes are just the time moving on.
+            self.show = false;
         }
+        Some(fall)
     }
 
     pub fn busy(&self, now: f64) -> bool {
@@ -342,6 +361,33 @@ mod tests {
         assert_eq!(Drum::Alpha.turn("A", "A").len(), Drum::Alpha.len());
         // A card that is still blank just comes round to its symbol.
         assert_eq!(Drum::Digit.turn(" ", "1"), ["0", "1"]);
+    }
+
+    #[test]
+    fn only_start_ups_and_refreshes_are_shows() {
+        let mut f = Flap::new(Drum::Digit, 0.0, 0.0, 1.0);
+        f.set("1");
+        let mut falls = Vec::new();
+        let mut t = 0.0;
+        for _ in 0..200 {
+            falls.extend(f.tick(t));
+            t += 0.01;
+        }
+        // Blank to 0, then 1.
+        assert_eq!(falls.len(), 2);
+        assert!(falls.iter().all(|f| f.show));
+        assert!(falls[1].land && !falls[0].land);
+        // The time moving on is not a show.
+        f.set("2");
+        let fall = (0..100).find_map(|_| {
+            t += 0.01;
+            f.tick(t)
+        });
+        assert!(fall.is_some_and(|f| !f.show && f.land));
+        // A refresh is.
+        f.turn("2", t, 0.0, 1.0);
+        t += 1.0;
+        assert!(f.tick(t).is_some_and(|f| f.show));
     }
 
     #[test]

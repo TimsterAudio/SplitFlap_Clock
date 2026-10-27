@@ -6,6 +6,8 @@ mod autostart;
 mod desktops;
 mod flap;
 mod icon;
+mod rng;
+mod sound;
 
 fn main() -> eframe::Result {
     autostart::refresh();

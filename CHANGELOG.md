@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.4.0 – 2026-10-27
+
+- **Sound**: the clatter of the cards when the board starts up and when it refreshes, made as it plays. Every flap that falls clicks, bigger cards sound deeper, each card sounds from its place on the board, and the last flap of each card lands with a knock. Turn it on in Settings (or from the right-click menu) and set the volume there.
+- The clock itself stays quiet: the time changing makes no sound unless you also tick **Also when the time changes**.
+- If the sound output isn't ready, as when the clock starts at login, the clock keeps trying for it.
+
 ## 0.3.1 – 2026-10-27
 
 - The clock starts up the same way a refresh looks: the cards set off a moment apart, each at its own speed, and settle in any order instead of sweeping across the board. Cards that appear later, such as for a newly added time zone, do the same.

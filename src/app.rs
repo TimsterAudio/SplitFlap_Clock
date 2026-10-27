@@ -11,6 +11,8 @@ use egui::{
 use serde::{Deserialize, Serialize};
 
 use crate::flap::{Drum, Flap, Look};
+use crate::rng::Rng;
+use crate::sound::{Click, Sound};
 use crate::{autostart, desktops};
 
 /// The longest zone name a row has cards for.
@@ -98,6 +100,11 @@ pub struct Saved {
     pub all_desktops: bool,
     /// The shortest and longest wait, in minutes, between random refreshes.
     pub random_minutes: (u32, u32),
+    /// The clatter of the cards at start-up and on refreshes.
+    pub sound: bool,
+    pub volume: f32,
+    /// Clatter when the time changes too, not just for shows.
+    pub clock_sound: bool,
 }
 
 impl Default for Saved {
@@ -114,6 +121,9 @@ impl Default for Saved {
             refresh: Refresh::Hourly,
             all_desktops: false,
             random_minutes: (10, 60),
+            sound: false,
+            volume: 0.6,
+            clock_sound: false,
         }
     }
 }
@@ -281,6 +291,12 @@ pub struct ClockApp {
     next_random: Option<(f64, (u32, u32))>,
     refresh_now: bool,
     rng: Rng,
+    sound: Option<Sound>,
+    sound_error: Option<String>,
+    /// Whether the sound was last turned on or off.
+    sound_applied: bool,
+    /// When to try the sound output again after it wouldn't open.
+    sound_retry: f64,
     /// The board size the window was last fitted to.
     fitted: Option<Vec2>,
     last_window: Vec2,
@@ -309,6 +325,10 @@ impl ClockApp {
             next_random: None,
             refresh_now: false,
             rng: Rng::seeded(),
+            sound: None,
+            sound_error: None,
+            sound_applied: false,
+            sound_retry: 0.0,
             fitted: None,
             last_window: Vec2::ZERO,
             resized_at: 0.0,
@@ -390,6 +410,33 @@ impl ClockApp {
                 Ink::Yellow => YELLOW,
                 Ink::White => WHITE,
             },
+        }
+    }
+
+    /// Opens the sound output when the sound is turned on, and closes it
+    /// when it is turned off. If it won't open, as when the clock starts at
+    /// login before the sound system is up, it tries again now and then.
+    fn apply_sound(&mut self, time: f64) {
+        if self.saved.sound != self.sound_applied {
+            self.sound_applied = self.saved.sound;
+            self.sound = None;
+            self.sound_error = None;
+            self.sound_retry = 0.0;
+        }
+        if self.saved.sound && self.sound.is_none() && time >= self.sound_retry {
+            match Sound::open(self.saved.volume) {
+                Ok(s) => {
+                    self.sound = Some(s);
+                    self.sound_error = None;
+                }
+                Err(e) => {
+                    self.sound_error = Some(e);
+                    self.sound_retry = time + 15.0;
+                }
+            }
+        }
+        if let Some(s) = &self.sound {
+            s.set_volume(self.saved.volume);
         }
     }
 
@@ -548,7 +595,17 @@ impl ClockApp {
                         } else {
                             flap.set(text);
                         }
-                        flap.tick(time);
+                        if let Some(fall) = flap.tick(time) {
+                            if let Some(sound) = &mut self.sound {
+                                if fall.show || self.saved.clock_sound {
+                                    sound.click(Click {
+                                        pan: (x + size.x / 2.0) / board.x * 2.0 - 1.0,
+                                        size: size.y,
+                                        land: fall.land,
+                                    });
+                                }
+                            }
+                        }
                         busy |= flap.busy(time);
                         // Cards sit on the line's baseline.
                         let r = Rect::from_min_size(u(x, y + h - size.y), *size * scale);
@@ -606,6 +663,9 @@ impl ClockApp {
                 .checkbox(&mut self.saved.all_desktops, "Show on all desktops")
                 .changed()
             {
+                ui.close();
+            }
+            if ui.checkbox(&mut self.saved.sound, "Sound").changed() {
                 ui.close();
             }
             if ui.button("Refresh the board").clicked() {
@@ -715,6 +775,21 @@ impl ClockApp {
                     });
                     ui.end_row();
                 }
+                ui.label("Sound");
+                ui.vertical(|ui| {
+                    ui.checkbox(&mut s.sound, "Clatter when the board starts and refreshes");
+                    ui.add_enabled_ui(s.sound, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Volume");
+                            ui.add(egui::Slider::new(&mut s.volume, 0.0..=1.0).show_value(false));
+                        });
+                        ui.checkbox(&mut s.clock_sound, "Also when the time changes");
+                    });
+                    if let Some(e) = &self.sound_error {
+                        ui.colored_label(ui.visuals().warn_fg_color, e);
+                    }
+                });
+                ui.end_row();
                 ui.label("Window");
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut s.on_top, "Keep on top");
@@ -855,6 +930,7 @@ impl eframe::App for ClockApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_window(&ctx);
+        self.apply_sound(ctx.input(|i| i.time));
         // Window managers only take these requests once the window is up.
         let on = self.saved.all_desktops;
         if ctx.input(|i| i.time) > 1.0 {
@@ -878,38 +954,6 @@ impl eframe::App for ClockApp {
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BOARD.to_normalized_gamma_f32()
-    }
-}
-
-/// A small random number source for the refreshes; nothing here needs
-/// more than xorshift.
-struct Rng(u64);
-
-impl Rng {
-    fn seeded() -> Self {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x9E37_79B9_7F4A_7C15);
-        Self(nanos | 1)
-    }
-
-    /// A number from `lo` up to `hi`.
-    fn between(&mut self, lo: f64, hi: f64) -> f64 {
-        let mut x = self.0;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.0 = x;
-        lo + (hi - lo) * ((x >> 11) as f64 / (1u64 << 53) as f64)
-    }
-
-    /// When a card sets off, in seconds from now, and how long its quick
-    /// flips take as a share of the usual. Every card on a real board gets
-    /// the word at once, but each starts a moment apart and runs at its own
-    /// speed.
-    fn scatter(&mut self) -> (f64, f64) {
-        (self.between(0.0, 0.9), self.between(0.8, 1.25))
     }
 }
 
@@ -948,15 +992,6 @@ mod tests {
         assert_eq!(texts(&time_cells(0, 30, None, false, true)), "12:30_AM");
         assert_eq!(texts(&time_cells(13, 0, None, false, true)), " 1:00_PM");
         assert_eq!(texts(&time_cells(12, 0, None, false, true)), "12:00_PM");
-    }
-
-    #[test]
-    fn random_numbers_stay_in_range() {
-        let mut rng = Rng(12345);
-        let draws: Vec<f64> = (0..1000).map(|_| rng.between(10.0, 60.0)).collect();
-        assert!(draws.iter().all(|&x| (10.0..60.0).contains(&x)));
-        // Spread across the range, not bunched at one end.
-        assert!(draws.iter().any(|&x| x < 20.0) && draws.iter().any(|&x| x > 50.0));
     }
 
     #[test]
