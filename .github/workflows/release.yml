@@ -1,13 +1,14 @@
-# Publishes a GitHub release whenever main carries a version (from
-# Cargo.toml) that hasn't been released yet. Bump the version, add its
-# section to CHANGELOG.md, push to main: the release `vX.Y.Z` appears with
-# the Windows exe and the Linux binary, and that section as its notes.
+# On the powernct branch: publishes a pre-release whenever the branch
+# carries a version (from Cargo.toml) that hasn't been released yet, such
+# as 0.5.1-powernct. Pre-releases never become the repo's "latest"
+# release, so main's releases are untouched. (main's copy of this file
+# releases main; don't merge this one into it.)
 
 name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [powernct]
     paths:
       - Cargo.toml
       - CHANGELOG.md
@@ -47,10 +48,10 @@ jobs:
         include:
           - os: ubuntu-24.04
             from: target/release/splitflap-clock
-            to: splitflap-clock-linux-x86_64
+            to: splitflap-clock-powernct-linux-x86_64
           - os: windows-latest
             from: target/release/splitflap-clock.exe
-            to: splitflap-clock.exe
+            to: splitflap-clock-powernct.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +69,7 @@ jobs:
 
   publish:
     needs: [version, build]
-    if: github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'false'
+    if: github.ref == 'refs/heads/powernct' && needs.version.outputs.exists == 'false'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -87,8 +88,10 @@ jobs:
 
           ## Downloads
 
-          - **Windows**: `splitflap-clock.exe`. Download it and run it; nothing to install.
-          - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
+          This is the powerNCT build of the clock, from the `powernct` branch.
+
+          - **Windows**: `splitflap-clock-powernct.exe`. Download it and run it; nothing to install.
+          - **Linux**: `splitflap-clock-powernct-linux-x86_64`. Download it, `chmod +x` it and run it.
           NOTES
           cat notes.md
       - name: Create the release
@@ -96,9 +99,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ needs.version.outputs.version }}"
-          chmod +x dist/splitflap-clock-linux-x86_64
+          chmod +x dist/splitflap-clock-powernct-linux-x86_64
           gh release create "v$ver" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
+            --prerelease \
+            --latest=false \
             --title "Split-Flap Clock $ver" \
             --notes-file notes.md
