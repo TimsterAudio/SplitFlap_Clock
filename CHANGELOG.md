@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.0-powernct – 2026-10-27 (a build for one user, not released)
+
+- **No limit on places**, and an **Add** button: search for a time zone, pick it from the list (or take the best match) and press Add or Enter. The window never grows past the screen; the board shrinks to fit.
+- **Set a place's time by hand**: choose "Set by hand" and enter the time it is there; the clock keeps that offset from UTC (without summer time changes).
+- **Colours**: the main time, the date and each place can have their own colour, picked in Settings; Reset goes back to the board's yellow or white.
+- **Regions**: give places a region and the board groups them under a heading per region; places with no region go under OTHER unless they come first. Move regions up and down the board in Settings.
+
 ## 0.4.0 – 2026-10-27
 
 - **Sound**: the clatter of the cards when the board starts up and when it refreshes, made as it plays. Every flap that falls clicks, bigger cards sound deeper, each card sounds from its place on the board, and the last flap of each card lands with a knock. Turn it on in Settings (or from the right-click menu) and set the volume there.
