@@ -597,7 +597,11 @@ mod tests {
             t - from
         };
         let normal = took(1.0);
-        assert!((took(2.0) / normal - 0.5).abs() < 0.05, "{}", took(2.0) / normal);
+        assert!(
+            (took(2.0) / normal - 0.5).abs() < 0.05,
+            "{}",
+            took(2.0) / normal
+        );
         assert!((took(0.5) / normal - 2.0).abs() < 0.1);
     }
 
