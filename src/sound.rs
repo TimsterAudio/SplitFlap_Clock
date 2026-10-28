@@ -7,6 +7,9 @@
 //! pitch, loudness and timing, and bigger cards sound lower and louder, so
 //! a whole board spinning sounds like a real one.
 //!
+//! The alarm's chime is the airport kind: two soft bell notes, high then
+//! low, "bing-bong", made the same way from a few sine partials.
+//!
 //! [`Clatter`] is plain Rust and allocates nothing once made; the audio
 //! callback runs it, fed through a lock-free queue.
 
@@ -29,7 +32,21 @@ pub struct Click {
     pub land: bool,
 }
 
+/// What the board asks the sound to play.
+#[derive(Clone, Copy, Debug)]
+pub enum Event {
+    Click(Click),
+    /// The alarm chime, at its own volume from 0 to 1.
+    Chime(f32),
+}
+
 const VOICES: usize = 64;
+const TONES: usize = 8;
+/// The chime's two notes, E5 then C5, and the time between them.
+const CHIME: [f32; 2] = [659.25, 523.25];
+const CHIME_GAP: f32 = 0.5;
+/// Each note's partials, as multiples of its pitch, and their levels.
+const PARTIALS: [(f32, f32); 3] = [(1.0, 1.0), (2.0, 0.18), (3.0, 0.06)];
 /// How long a click lasts, in seconds.
 const LIFE: f32 = 0.06;
 
@@ -49,6 +66,48 @@ struct Voice {
     knock_phase: f32,
     knock_step: f32,
     knock_decay: f32,
+}
+
+/// One bell note of the chime.
+#[derive(Clone, Copy, Default)]
+struct Tone {
+    live: bool,
+    wait: u32,
+    age: u32,
+    life: u32,
+    attack: u32,
+    level: f32,
+    env: f32,
+    decay: f32,
+    steps: [f32; 3],
+    phases: [f32; 3],
+    /// A slow, gentle wobble in level, as a struck bar has.
+    wobble: f32,
+    wobble_step: f32,
+}
+
+impl Tone {
+    fn sample(&mut self) -> f32 {
+        if self.wait > 0 {
+            self.wait -= 1;
+            return 0.0;
+        }
+        let rise = (self.age as f32 / self.attack.max(1) as f32).min(1.0);
+        let mut s = 0.0;
+        for (k, (_, amp)) in PARTIALS.iter().enumerate() {
+            s += amp * self.phases[k].sin();
+            self.phases[k] = (self.phases[k] + self.steps[k]) % std::f32::consts::TAU;
+        }
+        let wobble = 1.0 + 0.08 * self.wobble.sin();
+        self.wobble += self.wobble_step;
+        let out = s * self.level * self.env * rise * wobble;
+        self.env *= self.decay;
+        self.age += 1;
+        if self.age > self.life {
+            self.live = false;
+        }
+        out
+    }
 }
 
 /// A two-pole resonator, about unity gain at its centre.
@@ -85,6 +144,7 @@ impl Resonator {
 pub struct Clatter {
     rate: f32,
     voices: [Voice; VOICES],
+    tones: [Tone; TONES],
     rng: Rng,
 }
 
@@ -93,6 +153,7 @@ impl Clatter {
         Self {
             rate,
             voices: [Voice::default(); VOICES],
+            tones: [Tone::default(); TONES],
             rng,
         }
     }
@@ -130,7 +191,40 @@ impl Clatter {
         self.voices[slot] = v;
     }
 
-    /// Adds the clicks under way to `out`, interleaved stereo, at `volume`.
+    pub fn play(&mut self, e: Event) {
+        match e {
+            Event::Click(c) => self.trigger(c),
+            Event::Chime(gain) => self.chime(gain),
+        }
+    }
+
+    /// Starts the two notes of the alarm chime.
+    pub fn chime(&mut self, gain: f32) {
+        let rate = self.rate;
+        for (n, freq) in CHIME.into_iter().enumerate() {
+            let tone = Tone {
+                live: true,
+                wait: (n as f32 * CHIME_GAP * rate) as u32,
+                age: 0,
+                life: (3.5 * rate) as u32,
+                attack: (0.004 * rate) as u32,
+                level: 0.8 * gain.clamp(0.0, 1.0),
+                env: 1.0,
+                decay: (-1.0 / (1.1 * rate)).exp(),
+                steps: PARTIALS.map(|(m, _)| std::f32::consts::TAU * freq * m / rate),
+                phases: [0.0; 3],
+                wobble: 0.0,
+                wobble_step: std::f32::consts::TAU * 4.5 / rate,
+            };
+            let slot = (0..TONES)
+                .find(|&i| !self.tones[i].live)
+                .unwrap_or_else(|| (0..TONES).max_by_key(|&i| self.tones[i].age).unwrap_or(0));
+            self.tones[slot] = tone;
+        }
+    }
+
+    /// Adds the clicks under way to `out`, interleaved stereo, the clicks at
+    /// `volume` and the chime at its own.
     pub fn render(&mut self, out: &mut [f32], volume: f32) {
         let life = (LIFE * self.rate) as u32;
         for frame in out.as_chunks_mut::<2>().0 {
@@ -158,9 +252,13 @@ impl Clatter {
                     v.live = false;
                 }
             }
+            let mut bell = 0.0;
+            for t in self.tones.iter_mut().filter(|t| t.live) {
+                bell += t.sample();
+            }
             // A soft limit, so a whole board at once doesn't clip.
-            frame[0] += (l * volume * 0.5).tanh();
-            frame[1] += (r * volume * 0.5).tanh();
+            frame[0] += ((l * volume + bell) * 0.5).tanh();
+            frame[1] += ((r * volume + bell) * 0.5).tanh();
         }
     }
 }
@@ -168,7 +266,7 @@ impl Clatter {
 /// The sound output: the queue clicks go in by, and the stream that plays
 /// them. Dropping it closes the device.
 pub struct Sound {
-    clicks: rtrb::Producer<Click>,
+    events: rtrb::Producer<Event>,
     volume: Arc<AtomicU32>,
     _stream: cpal::Stream,
 }
@@ -195,7 +293,7 @@ impl Sound {
         }?;
         stream.play().map_err(|e| e.to_string())?;
         Ok(Self {
-            clicks: tx,
+            events: tx,
             volume: level,
             _stream: stream,
         })
@@ -203,7 +301,12 @@ impl Sound {
 
     pub fn click(&mut self, c: Click) {
         // A full queue just drops the click; there are plenty more.
-        let _ = self.clicks.push(c);
+        let _ = self.events.push(Event::Click(c));
+    }
+
+    /// Rings the alarm chime once, at `volume` from 0 to 1.
+    pub fn chime(&mut self, volume: f32) {
+        let _ = self.events.push(Event::Chime(gain(volume)));
     }
 
     pub fn set_volume(&self, v: f32) {
@@ -220,7 +323,7 @@ fn gain(v: f32) -> f32 {
 fn build<T>(
     dev: &cpal::Device,
     config: &StreamConfig,
-    mut clicks: rtrb::Consumer<Click>,
+    mut events: rtrb::Consumer<Event>,
     volume: Arc<AtomicU32>,
 ) -> Result<cpal::Stream, String>
 where
@@ -233,8 +336,8 @@ where
     dev.build_output_stream(
         *config,
         move |data: &mut [T], _| {
-            while let Ok(c) = clicks.pop() {
-                clatter.trigger(c);
+            while let Ok(e) = events.pop() {
+                clatter.play(e);
             }
             let vol = f32::from_bits(volume.load(Ordering::Relaxed));
             // In pieces the size of the scratch buffer, however much the
@@ -301,13 +404,30 @@ mod tests {
         assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
     }
 
-    /// Renders a start-up of a board like the default one to the WAV file
-    /// named by `CLATTER_WAV`, to hear what it sounds like.
     #[test]
-    #[ignore]
-    fn render_a_start_up() {
+    fn the_chime_rings_two_notes_and_fades() {
+        let rate = 48_000.0;
+        let mut c = Clatter::new(rate, Rng::with_seed(1));
+        c.chime(0.64);
+        let mut out = vec![0.0; 2 * 48_000 * 5];
+        c.render(&mut out, 1.0);
+        let peak = |a: f32, b: f32| {
+            out[(a * rate) as usize * 2..(b * rate) as usize * 2]
+                .iter()
+                .fold(0.0f32, |m, x| m.max(x.abs()))
+        };
+        // The second note starts half a second in, louder than the first
+        // has become by then; then it all dies away.
+        assert!(peak(0.0, 0.1) > 0.1);
+        assert!(peak(0.5, 0.6) > peak(0.4, 0.5));
+        assert!(peak(4.5, 5.0) == 0.0);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+    }
+
+    /// A board like the default one starting up, with the chime rung at
+    /// each of `chimes` seconds, as interleaved stereo at 48 kHz.
+    fn render_board(seconds: f64, chimes: &[f64]) -> Vec<f32> {
         use crate::flap::{Drum, Flap};
-        let path = std::env::var("CLATTER_WAV").expect("set CLATTER_WAV to a path");
         let rate = 48_000u32;
         let mut rng = Rng::with_seed(11);
         let mut clatter = Clatter::new(rate as f32, Rng::with_seed(5));
@@ -336,8 +456,13 @@ mod tests {
         let mut out = Vec::new();
         let frame = 1.0 / 60.0;
         let per_frame = (rate as f64 * frame) as usize;
-        for n in 0..(6.0 / frame) as usize {
+        let mut rung = 0;
+        for n in 0..(seconds / frame) as usize {
             let t = n as f64 * frame;
+            while rung < chimes.len() && chimes[rung] <= t {
+                clatter.chime(gain(0.8));
+                rung += 1;
+            }
             for (flap, want, size, pan) in &mut cards {
                 flap.set(want);
                 if let Some(fall) = flap.tick(t) {
@@ -352,6 +477,11 @@ mod tests {
             clatter.render(&mut buf, 0.6);
             out.extend(buf);
         }
+        out
+    }
+
+    fn write_wav(path: &str, out: &[f32]) {
+        let rate = 48_000u32;
         let mut wav = Vec::new();
         let data_len = (out.len() * 2) as u32;
         wav.extend_from_slice(b"RIFF");
@@ -368,5 +498,23 @@ mod tests {
             wav.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
         }
         std::fs::write(path, wav).unwrap();
+    }
+
+    /// Renders a start-up of a board like the default one to the WAV file
+    /// named by `CLATTER_WAV`, to hear what it sounds like.
+    #[test]
+    #[ignore]
+    fn render_a_start_up() {
+        let path = std::env::var("CLATTER_WAV").expect("set CLATTER_WAV to a path");
+        write_wav(&path, &render_board(6.0, &[]));
+    }
+
+    /// Renders an alarm going off, the board's clatter and three chimes, to
+    /// the WAV file named by `ALARM_WAV`.
+    #[test]
+    #[ignore]
+    fn render_an_alarm() {
+        let path = std::env::var("ALARM_WAV").expect("set ALARM_WAV to a path");
+        write_wav(&path, &render_board(12.5, &[0.3, 4.3, 8.3]));
     }
 }

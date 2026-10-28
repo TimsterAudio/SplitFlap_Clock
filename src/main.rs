@@ -1,6 +1,7 @@
 // No console window on Windows.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod alarm;
 mod app;
 mod autostart;
 mod desktops;

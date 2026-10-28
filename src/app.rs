@@ -10,6 +10,7 @@ use egui::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::alarm::{self, Alarm};
 use crate::flap::{Drum, Flap, Look};
 use crate::rng::Rng;
 use crate::sound::{Click, Sound};
@@ -50,6 +51,9 @@ pub struct Zone {
     /// taken from its time zone.
     #[serde(default)]
     pub offset: Option<i32>,
+    /// Its own number, so alarms can follow it wherever it moves.
+    #[serde(default)]
+    pub id: u64,
 }
 
 impl Zone {
@@ -60,6 +64,7 @@ impl Zone {
             region: String::new(),
             colour: None,
             offset: None,
+            id: 0,
         }
     }
 
@@ -207,6 +212,56 @@ pub struct Saved {
     pub date_colour: Option<[u8; 3]>,
     /// The order of the regions down the board.
     pub region_order: Vec<String>,
+    pub alarms: Vec<Alarm>,
+    /// The chime's own volume, which rings whether the clatter is on or not.
+    pub alarm_volume: f32,
+}
+
+impl Saved {
+    /// Gives every place and alarm a number of its own: ones saved before
+    /// they had numbers, and any that somehow share one.
+    fn number(&mut self) {
+        let mut seen = std::collections::HashSet::new();
+        let mut next = self.zones.iter().map(|z| z.id).max().unwrap_or(0) + 1;
+        for z in &mut self.zones {
+            if z.id == 0 || !seen.insert(z.id) {
+                z.id = next;
+                seen.insert(next);
+                next += 1;
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut next = self.alarms.iter().map(|a| a.id).max().unwrap_or(0) + 1;
+        for a in &mut self.alarms {
+            if a.id == 0 || !seen.insert(a.id) {
+                a.id = next;
+                seen.insert(next);
+                next += 1;
+            }
+        }
+    }
+
+    fn zone(&self, id: Option<u64>) -> Option<&Zone> {
+        id.and_then(|id| self.zones.iter().find(|z| z.id == id))
+    }
+
+    /// The time now at a place, or your own time for `None` (or a place
+    /// that has gone).
+    fn time_at(&self, place: Option<u64>) -> chrono::NaiveDateTime {
+        let utc = Utc::now();
+        match self.zone(place) {
+            Some(z) => match z.offset {
+                Some(off) => FixedOffset::east_opt(off * 60)
+                    .map(|f| utc.with_timezone(&f).naive_local())
+                    .unwrap_or_else(|| utc.naive_utc()),
+                None => match Tz::from_str(&z.tz) {
+                    Ok(tz) => utc.with_timezone(&tz).naive_local(),
+                    Err(_) => chrono::Local::now().naive_local(),
+                },
+            },
+            None => chrono::Local::now().naive_local(),
+        }
+    }
 }
 
 impl Default for Saved {
@@ -229,6 +284,8 @@ impl Default for Saved {
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
+            alarms: Vec::new(),
+            alarm_volume: 0.8,
         }
     }
 }
@@ -277,7 +334,12 @@ struct Line {
     ink: Color32,
     /// A region heading over the line, for the first city of a region.
     heading: Option<String>,
+    /// A small caption under the line.
+    note: Option<&'static str>,
 }
+
+/// The room a caption takes under its line.
+const NOTE: f32 = 16.0;
 
 /// The room a region heading takes above its first city.
 const HEADING: f32 = 26.0;
@@ -364,6 +426,34 @@ fn zone_cells(label: &str, h: u32, m: u32, day: &str, h24: bool) -> Vec<Cell> {
     cells
 }
 
+/// An alarm that's ringing or snoozing.
+struct Ringing {
+    id: u64,
+    label: String,
+    /// The time on the board: the alarm's, or when a snooze ends.
+    shown: (u32, u32),
+    place: Option<u64>,
+    /// When it started ringing (again), in seconds since 1970.
+    since: i64,
+    snoozed_until: Option<i64>,
+}
+
+/// The alarm's row: its label, its time, and NOW and ALARM by turns, or
+/// DELAYED while it snoozes, as a board announces a flight.
+fn alarm_cells(r: &Ringing, h24: bool, now: i64) -> Vec<Cell> {
+    let remark = match r.snoozed_until {
+        Some(_) => "DELAYED",
+        None if (now / 3) % 2 == 0 => "NOW",
+        None => "ALARM",
+    };
+    let mut cells = text_cards(&r.label, NAME_CARDS);
+    cells.push(Cell::Gap(18.0));
+    cells.extend(time_cells(r.shown.0, r.shown.1, None, h24, false));
+    cells.push(Cell::Gap(18.0));
+    cells.extend(text_cards(remark, 7));
+    cells
+}
+
 fn row_width(cells: &[Cell]) -> f32 {
     let mut w = 0.0;
     for (i, c) in cells.iter().enumerate() {
@@ -413,6 +503,10 @@ pub struct ClockApp {
     sound_applied: bool,
     /// When to try the sound output again after it wouldn't open.
     sound_retry: f64,
+    /// Alarms ringing or snoozing, the first one on the board.
+    ringing: Vec<Ringing>,
+    /// When to ring the chime again.
+    next_chime: f64,
     /// The board size the window was last fitted to.
     fitted: Option<Vec2>,
     last_window: Vec2,
@@ -422,10 +516,11 @@ pub struct ClockApp {
 impl ClockApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         install_fonts(&cc.egui_ctx);
-        let saved = cc
+        let mut saved: Saved = cc
             .storage
             .and_then(|s| eframe::get_value(s, eframe::APP_KEY))
             .unwrap_or_default();
+        saved.number();
         Self {
             saved,
             flaps: HashMap::new(),
@@ -446,6 +541,8 @@ impl ClockApp {
             sound_error: None,
             sound_applied: false,
             sound_retry: 0.0,
+            ringing: Vec::new(),
+            next_chime: 0.0,
             fitted: None,
             last_window: Vec2::ZERO,
             resized_at: 0.0,
@@ -467,7 +564,21 @@ impl ClockApp {
             ),
             ink: s.time_colour.map_or(ink, rgb),
             heading: None,
+            note: None,
         }];
+        if let Some(r) = self.ringing.first() {
+            lines.push(Line {
+                key: "alarm".into(),
+                cells: alarm_cells(r, s.h24, now.timestamp()),
+                ink,
+                heading: None,
+                note: Some(if r.snoozed_until.is_some() {
+                    "RIGHT-CLICK OR ESC TO STOP"
+                } else {
+                    "CLICK TO SNOOZE 9 MINUTES  -  RIGHT-CLICK OR ESC TO STOP"
+                }),
+            });
+        }
         if s.date {
             let date = now.format("%a %d %b %Y").to_string().to_uppercase();
             lines.push(Line {
@@ -475,6 +586,7 @@ impl ClockApp {
                 cells: date_cells(&date),
                 ink: s.date_colour.map_or(ink, rgb),
                 heading: None,
+                note: None,
             });
         }
         let utc = Utc::now();
@@ -502,6 +614,7 @@ impl ClockApp {
                 cells: zone_cells(&z.label.to_uppercase(), h, m, &day, s.h24),
                 ink: z.colour.map_or(ink, rgb),
                 heading,
+                note: None,
             });
         }
         lines
@@ -531,7 +644,12 @@ impl ClockApp {
         } else {
             0.0
         };
-        heading + Self::rows_gap(lines, i)
+        let note = if lines[i - 1].note.is_some() {
+            NOTE
+        } else {
+            0.0
+        };
+        heading + note + Self::rows_gap(lines, i)
     }
 
     fn rows_gap(lines: &[Line], i: usize) -> f32 {
@@ -567,13 +685,17 @@ impl ClockApp {
     /// when it is turned off. If it won't open, as when the clock starts at
     /// login before the sound system is up, it tries again now and then.
     fn apply_sound(&mut self, time: f64) {
-        if self.saved.sound != self.sound_applied {
-            self.sound_applied = self.saved.sound;
+        // The output is open for the clatter, and for alarms, which chime
+        // whether the clatter is on or not.
+        let want =
+            self.saved.sound || self.saved.alarms.iter().any(|a| a.on) || !self.ringing.is_empty();
+        if want != self.sound_applied {
+            self.sound_applied = want;
             self.sound = None;
             self.sound_error = None;
             self.sound_retry = 0.0;
         }
-        if self.saved.sound && self.sound.is_none() && time >= self.sound_retry {
+        if want && self.sound.is_none() && time >= self.sound_retry {
             match Sound::open(self.saved.volume) {
                 Ok(s) => {
                     self.sound = Some(s);
@@ -663,6 +785,74 @@ impl ClockApp {
             .is_some_and(|(e, n)| e == every && n != slot.1);
         self.refresh_slot = Some(slot);
         due
+    }
+
+    /// Starts alarms that are due, wakes snoozed ones, rings the chime and
+    /// gives up on an alarm nobody has answered.
+    fn alarms(&mut self, time: f64) {
+        let now = Utc::now().timestamp();
+        let mut started = Vec::new();
+        for i in 0..self.saved.alarms.len() {
+            let place = self.saved.alarms[i].place;
+            let at = self.saved.time_at(place);
+            if let Some(day) = self.saved.alarms[i].due(at) {
+                self.saved.alarms[i].rung(day);
+                started.push(self.saved.alarms[i].id);
+            }
+        }
+        for id in started {
+            self.ring(id);
+        }
+        for r in &mut self.ringing {
+            if r.snoozed_until.is_some_and(|until| now >= until) {
+                r.snoozed_until = None;
+                r.since = now;
+                self.refresh_now = true;
+                self.next_chime = 0.0;
+            }
+        }
+        self.ringing
+            .retain(|r| r.snoozed_until.is_some() || now - r.since < alarm::RING_FOR * 60);
+        if self.ringing.iter().any(|r| r.snoozed_until.is_none()) && time >= self.next_chime {
+            // Until the sound output is open, the chime waits for it.
+            if let Some(sound) = &mut self.sound {
+                sound.chime(self.saved.alarm_volume);
+                self.next_chime = time + 4.0;
+            }
+        }
+    }
+
+    /// Rings alarm `id` now: it goes on the board with a clatter.
+    fn ring(&mut self, id: u64) {
+        let Some(a) = self.saved.alarms.iter().find(|a| a.id == id) else {
+            return;
+        };
+        let r = Ringing {
+            id,
+            label: a.label.to_uppercase(),
+            shown: (a.hour, a.minute),
+            place: a.place,
+            since: Utc::now().timestamp(),
+            snoozed_until: None,
+        };
+        self.ringing.retain(|x| x.id != id);
+        self.ringing.push(r);
+        self.refresh_now = true;
+        self.next_chime = 0.0;
+    }
+
+    /// Snoozes every alarm that's ringing for nine minutes; the board shows
+    /// when it will ring again, by its place's time.
+    fn snooze(&mut self) {
+        let until = Utc::now().timestamp() + alarm::SNOOZE * 60;
+        for i in 0..self.ringing.len() {
+            if self.ringing[i].snoozed_until.is_none() {
+                let then = self.saved.time_at(self.ringing[i].place)
+                    + chrono::Duration::minutes(alarm::SNOOZE);
+                self.ringing[i].snoozed_until = Some(until);
+                self.ringing[i].shown = (then.hour(), then.minute());
+            }
+        }
     }
 
     fn board(&mut self, ui: &mut Ui) {
@@ -768,7 +958,7 @@ impl ClockApp {
                             flap.set(text);
                         }
                         if let Some(fall) = flap.tick(time) {
-                            if let Some(sound) = &mut self.sound {
+                            if let (true, Some(sound)) = (self.saved.sound, &mut self.sound) {
                                 if fall.show || self.saved.clock_sound {
                                     sound.click(Click {
                                         pan: (x + size.x / 2.0) / board.x * 2.0 - 1.0,
@@ -805,6 +995,15 @@ impl ClockApp {
                 }
             }
             y += h;
+            if let Some(note) = line.note {
+                painter.text(
+                    u(board.x / 2.0, y + 5.0),
+                    Align2::CENTER_TOP,
+                    note,
+                    caption.clone(),
+                    CAPTION,
+                );
+            }
         }
         // Forget the cards of zones that have gone.
         self.flaps.retain(|k, _| lines.iter().any(|l| &l.key == k));
@@ -817,7 +1016,29 @@ impl ClockApp {
         if response.double_clicked() {
             self.settings_open = true;
         }
+        // A ringing alarm: a click snoozes it, Esc or the menu stops it.
+        if !self.ringing.is_empty() {
+            if response.clicked() {
+                self.snooze();
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.ringing.clear();
+            }
+        }
         response.context_menu(|ui| {
+            if !self.ringing.is_empty() {
+                if self.ringing.iter().any(|r| r.snoozed_until.is_none())
+                    && ui.button("Snooze 9 minutes").clicked()
+                {
+                    self.snooze();
+                    ui.close();
+                }
+                if ui.button("Stop alarm").clicked() {
+                    self.ringing.clear();
+                    ui.close();
+                }
+                ui.separator();
+            }
             if ui.button("Settings…").clicked() {
                 self.settings_open = true;
                 ui.close();
@@ -896,6 +1117,14 @@ impl ClockApp {
     }
 
     fn settings_ui(&mut self, ui: &mut Ui) {
+        let mut test = None;
+        self.settings_ui_inner(ui, &mut test);
+        if let Some(id) = test {
+            self.ring(id);
+        }
+    }
+
+    fn settings_ui_inner(&mut self, ui: &mut Ui, test: &mut Option<u64>) {
         let s = &mut self.saved;
         ui.heading("Display");
         egui::Grid::new("display")
@@ -1020,6 +1249,98 @@ impl ClockApp {
                 ui.end_row();
             });
 
+        // Alarms.
+        ui.add_space(12.0);
+        ui.heading("Alarms");
+        ui.label("The board announces them with a chime, until you click to snooze or stop them.");
+        ui.add_space(4.0);
+        let places: Vec<(u64, String)> = s
+            .zones
+            .iter()
+            .map(|z| (z.id, format!("{} ({})", z.label.to_uppercase(), z.tz)))
+            .collect();
+        let mut remove = None;
+        for (i, a) in s.alarms.iter_mut().enumerate() {
+            let before = (a.hour, a.minute, a.days, a.place, a.on);
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut a.on, "").on_hover_text("On or off");
+                    ui.add(
+                        egui::DragValue::new(&mut a.hour)
+                            .range(0..=23)
+                            .custom_formatter(|v, _| format!("{v:02}")),
+                    );
+                    ui.label(":");
+                    ui.add(
+                        egui::DragValue::new(&mut a.minute)
+                            .range(0..=59)
+                            .custom_formatter(|v, _| format!("{v:02}")),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut a.label)
+                            .char_limit(NAME_CARDS)
+                            .desired_width(120.0),
+                    )
+                    .on_hover_text("What the board says when it rings");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(i);
+                        }
+                        if ui
+                            .small_button("Test")
+                            .on_hover_text("Ring it now, to hear it")
+                            .clicked()
+                        {
+                            *test = Some(a.id);
+                        }
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Repeat");
+                    for (d, name) in ["M", "T", "W", "T", "F", "S", "S"].iter().enumerate() {
+                        let on = a.days[d];
+                        if ui.selectable_label(on, *name).clicked() {
+                            a.days[d] = !on;
+                        }
+                    }
+                    ui.label(egui::RichText::new(a.days_text()).weak());
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Time at");
+                    let current = places
+                        .iter()
+                        .find(|(id, _)| Some(*id) == a.place)
+                        .map_or("Your time", |(_, name)| name.as_str());
+                    egui::ComboBox::from_id_salt(("alarm place", a.id))
+                        .selected_text(current)
+                        .width(220.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut a.place, None, "Your time");
+                            for (id, name) in &places {
+                                ui.selectable_value(&mut a.place, Some(*id), name);
+                            }
+                        });
+                });
+            });
+            // A changed alarm can ring again today, at its new time.
+            if before != (a.hour, a.minute, a.days, a.place, a.on) {
+                a.rang = None;
+            }
+        }
+        if let Some(i) = remove {
+            s.alarms.remove(i);
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Add an alarm").clicked() {
+                s.alarms.push(Alarm::default());
+                s.number();
+            }
+            ui.add_space(12.0);
+            ui.label("Chime volume");
+            ui.add(egui::Slider::new(&mut s.alarm_volume, 0.0..=1.0).show_value(false));
+        });
+
         // Adding a place: search, pick, Add.
         ui.add_space(12.0);
         ui.heading("Add a place");
@@ -1056,6 +1377,7 @@ impl ClockApp {
         });
         if let (true, Some(c)) = (add, &choice) {
             s.zones.push(Zone::new(c));
+            s.number();
             self.search.clear();
             self.picked = None;
         }
@@ -1233,7 +1555,9 @@ impl eframe::App for ClockApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_window(&ctx);
-        self.apply_sound(ctx.input(|i| i.time));
+        let time = ctx.input(|i| i.time);
+        self.alarms(time);
+        self.apply_sound(time);
         // Window managers only take these requests once the window is up.
         let on = self.saved.all_desktops;
         if ctx.input(|i| i.time) > 1.0 {
@@ -1444,6 +1768,41 @@ mod tests {
         assert_eq!(region_order(&s), ["", "ASIA", "EUROPE"]);
         assert_eq!(names(&s)[0], (None, "UTC".into()));
         assert_eq!(names(&s)[1], (asia, "Asia/Tokyo".into()));
+    }
+
+    #[test]
+    fn places_and_alarms_get_numbers_of_their_own() {
+        let mut s: Saved = ron::from_str(
+            "(zones: [(tz: \"Asia/Tokyo\", label: \"TOKYO\"), (tz: \"UTC\", label: \"UTC\", id: 5), (tz: \"UTC\", label: \"B\", id: 5)], alarms: [(), ()])",
+        )
+        .unwrap();
+        s.number();
+        let ids: Vec<u64> = s.zones.iter().map(|z| z.id).collect();
+        assert!(ids.iter().all(|&id| id != 0));
+        assert_eq!(ids[1], 5);
+        assert!(ids[0] != ids[1] && ids[0] != ids[2] && ids[1] != ids[2]);
+        assert!(s.alarms[0].id != 0 && s.alarms[0].id != s.alarms[1].id);
+        // An alarm that follows a place that has gone follows your time.
+        assert!(s.zone(Some(999)).is_none());
+    }
+
+    #[test]
+    fn the_alarm_row_announces_and_delays() {
+        let mut r = Ringing {
+            id: 1,
+            label: "WAKE UP".into(),
+            shown: (7, 30),
+            place: None,
+            since: 0,
+            snoozed_until: None,
+        };
+        let row = texts(&alarm_cells(&r, true, 0));
+        assert!(row.starts_with("WAKE UP") && row.contains("07:30") && row.contains("NOW"));
+        assert!(texts(&alarm_cells(&r, true, 3)).contains("ALARM"));
+        r.snoozed_until = Some(540);
+        r.shown = (7, 39);
+        let row = texts(&alarm_cells(&r, true, 0));
+        assert!(row.contains("07:39") && row.contains("DELAYED"));
     }
 
     #[test]
