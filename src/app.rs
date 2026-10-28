@@ -264,6 +264,9 @@ pub struct Saved {
     pub menus: Theme,
     /// White cards with dark letters, instead of black with yellow or white.
     pub light_board: bool,
+    /// How fast the flaps fall, 1 being the usual: from a quarter as fast
+    /// to four times as fast.
+    pub flip_speed: f32,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -342,6 +345,7 @@ impl Default for Saved {
             sky_main: false,
             menus: Theme::System,
             light_board: false,
+            flip_speed: 1.0,
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -1074,6 +1078,7 @@ impl ClockApp {
         let u = |x: f32, y: f32| origin + vec2(x, y) * scale;
 
         let base = self.look();
+        let speed = self.saved.flip_speed.clamp(0.25, 4.0) as f64;
         let refresh = self.refresh_due(time) | std::mem::take(&mut self.refresh_now);
         let mut busy = false;
         let mut y = PAD;
@@ -1145,7 +1150,7 @@ impl ClockApp {
                     .map(|d| {
                         d.map(|d| {
                             let (delay, pace) = self.rng.scatter();
-                            Flap::new(d, time, delay, pace)
+                            Flap::new(d, time, delay / speed, pace)
                         })
                     })
                     .collect();
@@ -1159,11 +1164,11 @@ impl ClockApp {
                         let flap = flaps[k].as_mut().expect("a card for every card cell");
                         if refresh {
                             let (delay, pace) = self.rng.scatter();
-                            flap.turn(text, time, delay, pace);
+                            flap.turn(text, time, delay / speed, pace);
                         } else {
                             flap.set(text);
                         }
-                        if let Some(fall) = flap.tick(time) {
+                        if let Some(fall) = flap.tick(time, speed) {
                             if let (true, Some(sound)) = (self.saved.sound, &mut self.sound) {
                                 if fall.show || self.saved.clock_sound {
                                     sound.click(Click {
@@ -1478,6 +1483,23 @@ impl ClockApp {
                 })
                 .response
                 .on_hover_text("A card showing morning, day, evening or night there, from its sunrise and sunset");
+                ui.end_row();
+                ui.label("Flip speed");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut s.flip_speed, 0.25..=4.0)
+                            .logarithmic(true)
+                            .custom_formatter(|v, _| format!("{v:.2}x"))
+                            .text(""),
+                    )
+                    .on_hover_text("How fast the flaps fall: slower, for a stately board, or faster, for a frantic one");
+                    if ui
+                        .add_enabled(s.flip_speed != 1.0, egui::Button::new("Normal").small())
+                        .clicked()
+                    {
+                        s.flip_speed = 1.0;
+                    }
+                });
                 ui.end_row();
                 ui.label("Refresh");
                 egui::ComboBox::from_id_salt("refresh")

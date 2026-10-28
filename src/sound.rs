@@ -465,7 +465,7 @@ mod tests {
             }
             for (flap, want, size, pan) in &mut cards {
                 flap.set(want);
-                if let Some(fall) = flap.tick(t) {
+                if let Some(fall) = flap.tick(t, 1.0) {
                     clatter.trigger(Click {
                         pan: *pan,
                         size: *size,

@@ -200,8 +200,8 @@ impl Flap {
     }
 
     /// Moves the card on to its next flap when the current flip is done,
-    /// and says so.
-    pub fn tick(&mut self, now: f64) -> Option<Fall> {
+    /// and says so. `speed` is how fast flaps fall, 1 being the usual.
+    pub fn tick(&mut self, now: f64, speed: f64) -> Option<Fall> {
         if now < self.hold || self.progress(now) < 1.0 {
             return None;
         }
@@ -209,7 +209,7 @@ impl Flap {
         self.prev = std::mem::replace(&mut self.cur, next);
         self.start = now;
         let land = self.queue.is_empty();
-        self.dur = if land { FLIP } else { FAST * self.pace };
+        self.dur = if land { FLIP } else { FAST * self.pace } / speed.max(0.05);
         let fall = Fall {
             land,
             show: self.show,
@@ -538,7 +538,7 @@ mod tests {
         let mut falls = Vec::new();
         let mut t = 0.0;
         for _ in 0..200 {
-            falls.extend(f.tick(t));
+            falls.extend(f.tick(t, 1.0));
             t += 0.01;
         }
         // Blank to 0, then 1.
@@ -549,13 +549,13 @@ mod tests {
         f.set("2");
         let fall = (0..100).find_map(|_| {
             t += 0.01;
-            f.tick(t)
+            f.tick(t, 1.0)
         });
         assert!(fall.is_some_and(|f| !f.show && f.land));
         // A refresh is.
         f.turn("2", t, 0.0, 1.0);
         t += 1.0;
-        assert!(f.tick(t).is_some_and(|f| f.show));
+        assert!(f.tick(t, 1.0).is_some_and(|f| f.show));
     }
 
     #[test]
@@ -578,6 +578,30 @@ mod tests {
     }
 
     #[test]
+    fn the_flip_speed_scales_the_flips() {
+        // How long a card takes from A to Z at a speed.
+        let took = |speed: f64| {
+            let mut f = Flap::new(Drum::Alpha, 0.0, 0.0, 1.0);
+            f.set("A");
+            let mut t = 0.0;
+            while f.busy(t) || t == 0.0 {
+                f.tick(t, 1.0);
+                t += 0.001;
+            }
+            let from = t;
+            f.set("Z");
+            while f.busy(t) {
+                f.tick(t, speed);
+                t += 0.001;
+            }
+            t - from
+        };
+        let normal = took(1.0);
+        assert!((took(2.0) / normal - 0.5).abs() < 0.05, "{}", took(2.0) / normal);
+        assert!((took(0.5) / normal - 2.0).abs() < 0.1);
+    }
+
+    #[test]
     fn a_blank_card_comes_round_from_the_start() {
         assert_eq!(Drum::Digit.steps(" ", "2"), ["0", "1", "2"]);
         assert_eq!(Drum::AmPm.steps(" ", "PM"), ["AM", "PM"]);
@@ -594,7 +618,7 @@ mod tests {
         f.set("C");
         let mut t = 0.0;
         while f.busy(t) || t == 0.0 {
-            f.tick(t);
+            f.tick(t, 1.0);
             t += 0.01;
             assert!(t < 5.0);
         }

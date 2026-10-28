@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Flip speed**, in Settings: how fast the flaps fall, from a quarter as fast (a stately board) to four times as fast (a frantic one), with **Normal** to go back. It sets everything: each flap's fall, the spin through the alphabet, and the ripple at start-up and on refreshes.
+
 - When an alarm rings, **SNOOZE** and **STOP** flap cards appear under it, to press. They light up under the pointer. (A click anywhere else on the board still snoozes, and Esc still stops.)
 - An alarm's days stand out: the days it rings on are lit yellow. An alarm can be set **On a date** instead, to ring once on that day.
 - Alarms only ring for times that come round while the clock is running: starting the clock just after an alarm's time, or setting or changing an alarm for a time just gone, no longer rings it straight away. After the computer has been asleep, an alarm missed by less than 10 minutes still rings.
