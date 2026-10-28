@@ -446,12 +446,41 @@ fn alarm_cells(r: &Ringing, h24: bool, now: i64) -> Vec<Cell> {
         None if (now / 3) % 2 == 0 => "NOW",
         None => "ALARM",
     };
-    let mut cells = text_cards(&r.label, NAME_CARDS);
+    let label = r.label.trim();
+    let mut cells = text_cards(label, label.chars().count().clamp(1, NAME_CARDS));
     cells.push(Cell::Gap(18.0));
     cells.extend(time_cells(r.shown.0, r.shown.1, None, h24, false));
     cells.push(Cell::Gap(18.0));
     cells.extend(text_cards(remark, 7));
     cells
+}
+
+/// `cells` made smaller, if need be, to fit `width`, so that a row that
+/// comes and goes, like an alarm's, never changes the board's width (and
+/// so the window's).
+fn fit(cells: Vec<Cell>, width: f32) -> Vec<Cell> {
+    let k = (width / row_width(&cells)).min(1.0);
+    if k >= 1.0 {
+        return cells;
+    }
+    cells
+        .into_iter()
+        .map(|c| match c {
+            Cell::Card {
+                drum,
+                text,
+                size,
+                font,
+            } => Cell::Card {
+                drum,
+                text,
+                size: size * k,
+                font,
+            },
+            Cell::Colon { size } => Cell::Colon { size: size * k },
+            Cell::Gap(g) => Cell::Gap(g * k),
+        })
+        .collect()
 }
 
 fn row_width(cells: &[Cell]) -> f32 {
@@ -566,19 +595,6 @@ impl ClockApp {
             heading: None,
             note: None,
         }];
-        if let Some(r) = self.ringing.first() {
-            lines.push(Line {
-                key: "alarm".into(),
-                cells: alarm_cells(r, s.h24, now.timestamp()),
-                ink,
-                heading: None,
-                note: Some(if r.snoozed_until.is_some() {
-                    "RIGHT-CLICK OR ESC TO STOP"
-                } else {
-                    "CLICK TO SNOOZE 9 MINUTES  -  RIGHT-CLICK OR ESC TO STOP"
-                }),
-            });
-        }
         if s.date {
             let date = now.format("%a %d %b %Y").to_string().to_uppercase();
             lines.push(Line {
@@ -616,6 +632,27 @@ impl ClockApp {
                 heading,
                 note: None,
             });
+        }
+        // The alarm's row goes under the main time, no wider than the rest.
+        if let Some(r) = self.ringing.first() {
+            let width = lines
+                .iter()
+                .map(|l| row_width(&l.cells))
+                .fold(0.0, f32::max);
+            lines.insert(
+                1,
+                Line {
+                    key: "alarm".into(),
+                    cells: fit(alarm_cells(r, s.h24, now.timestamp()), width),
+                    ink,
+                    heading: None,
+                    note: Some(if r.snoozed_until.is_some() {
+                        "RIGHT-CLICK OR ESC TO STOP"
+                    } else {
+                        "CLICK TO SNOOZE 9 MIN  -  RIGHT-CLICK OR ESC TO STOP"
+                    }),
+                },
+            );
         }
         lines
     }
@@ -1784,6 +1821,24 @@ mod tests {
         assert!(s.alarms[0].id != 0 && s.alarms[0].id != s.alarms[1].id);
         // An alarm that follows a place that has gone follows your time.
         assert!(s.zone(Some(999)).is_none());
+    }
+
+    #[test]
+    fn the_alarm_row_never_widens_the_board() {
+        let r = Ringing {
+            id: 1,
+            label: "TIME FOR TEA".into(),
+            shown: (16, 0),
+            place: None,
+            since: 0,
+            snoozed_until: None,
+        };
+        let main = time_cells(9, 5, None, true, true);
+        let row = fit(alarm_cells(&r, false, 0), row_width(&main));
+        assert!(row_width(&row) <= row_width(&main) + 0.01);
+        // On a wide board it keeps its full size.
+        let row = fit(alarm_cells(&r, false, 0), 5000.0);
+        assert_eq!(row_width(&row), row_width(&alarm_cells(&r, false, 0)));
     }
 
     #[test]
