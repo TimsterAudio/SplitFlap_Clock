@@ -465,6 +465,8 @@ fn has_sky(cells: &[Cell]) -> bool {
 struct Ringing {
     id: u64,
     label: String,
+    /// What it's for, shown where NOW would be.
+    reason: String,
     /// The time on the board: the alarm's, or when a snooze ends.
     shown: (u32, u32),
     place: Option<u64>,
@@ -473,20 +475,24 @@ struct Ringing {
     snoozed_until: Option<i64>,
 }
 
-/// The alarm's row: its label, its time, and NOW and ALARM by turns, or
-/// DELAYED while it snoozes, as a board announces a flight.
-fn alarm_cells(r: &Ringing, h24: bool, now: i64) -> Vec<Cell> {
+/// The alarm's row, as a board announces a flight: its label, its time,
+/// and its reason, or NOW if it has none, or DELAYED while it snoozes. The
+/// last cards flip to their word once and stay there.
+fn alarm_cells(r: &Ringing, h24: bool) -> Vec<Cell> {
+    let reason = r.reason.trim();
     let remark = match r.snoozed_until {
         Some(_) => "DELAYED",
-        None if (now / 3) % 2 == 0 => "NOW",
-        None => "ALARM",
+        None if reason.is_empty() => "NOW",
+        None => reason,
     };
+    // The same number of cards snoozed or not, so the row keeps its shape.
+    let room = reason.chars().count().clamp(7, NAME_CARDS);
     let label = r.label.trim();
     let mut cells = text_cards(label, label.chars().count().clamp(1, NAME_CARDS));
     cells.push(Cell::Gap(18.0));
     cells.extend(time_cells(r.shown.0, r.shown.1, None, h24, false));
     cells.push(Cell::Gap(18.0));
-    cells.extend(text_cards(remark, 7));
+    cells.extend(text_cards(remark, room));
     cells
 }
 
@@ -695,7 +701,7 @@ impl ClockApp {
                 1,
                 Line {
                     key: "alarm".into(),
-                    cells: fit(alarm_cells(r, s.h24, now.timestamp()), width),
+                    cells: fit(alarm_cells(r, s.h24), width),
                     ink,
                     heading: None,
                     note: Some(if r.snoozed_until.is_some() {
@@ -919,6 +925,7 @@ impl ClockApp {
         let r = Ringing {
             id,
             label: a.label.to_uppercase(),
+            reason: a.reason.to_uppercase(),
             shown: (a.hour, a.minute),
             place: a.place,
             since: Utc::now().timestamp(),
@@ -1391,7 +1398,7 @@ impl ClockApp {
                             .char_limit(NAME_CARDS)
                             .desired_width(120.0),
                     )
-                    .on_hover_text("What the board says when it rings");
+                    .on_hover_text("The alarm's name, on the board when it rings");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button("Remove").clicked() {
                             remove = Some(i);
@@ -1404,6 +1411,18 @@ impl ClockApp {
                             *test = Some(a.id);
                         }
                     });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Reason");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut a.reason)
+                            .char_limit(NAME_CARDS)
+                            .desired_width(120.0)
+                            .hint_text("e.g. Dentist"),
+                    )
+                    .on_hover_text(
+                        "What it's for: the board shows it instead of NOW when it rings",
+                    );
                 });
                 ui.horizontal(|ui| {
                     ui.label("Repeat");
@@ -1926,17 +1945,18 @@ mod tests {
         let r = Ringing {
             id: 1,
             label: "TIME FOR TEA".into(),
+            reason: String::new(),
             shown: (16, 0),
             place: None,
             since: 0,
             snoozed_until: None,
         };
         let main = time_cells(9, 5, None, true, true);
-        let row = fit(alarm_cells(&r, false, 0), row_width(&main));
+        let row = fit(alarm_cells(&r, false), row_width(&main));
         assert!(row_width(&row) <= row_width(&main) + 0.01);
         // On a wide board it keeps its full size.
-        let row = fit(alarm_cells(&r, false, 0), 5000.0);
-        assert_eq!(row_width(&row), row_width(&alarm_cells(&r, false, 0)));
+        let row = fit(alarm_cells(&r, false), 5000.0);
+        assert_eq!(row_width(&row), row_width(&alarm_cells(&r, false)));
     }
 
     #[test]
@@ -1944,18 +1964,35 @@ mod tests {
         let mut r = Ringing {
             id: 1,
             label: "WAKE UP".into(),
+            reason: String::new(),
             shown: (7, 30),
             place: None,
             since: 0,
             snoozed_until: None,
         };
-        let row = texts(&alarm_cells(&r, true, 0));
+        // NOW, and only NOW: it doesn't change while it rings.
+        let row = texts(&alarm_cells(&r, true));
         assert!(row.starts_with("WAKE UP") && row.contains("07:30") && row.contains("NOW"));
-        assert!(texts(&alarm_cells(&r, true, 3)).contains("ALARM"));
+        // With a reason, the reason.
+        r.reason = "DENTIST AT 9".into();
+        let row = texts(&alarm_cells(&r, true));
+        assert!(row.ends_with("DENTIST AT 9") && !row.contains("NOW"));
+        // Snoozed, DELAYED, on as many cards as the reason had.
         r.snoozed_until = Some(540);
         r.shown = (7, 39);
-        let row = texts(&alarm_cells(&r, true, 0));
-        assert!(row.contains("07:39") && row.contains("DELAYED"));
+        let snoozed = alarm_cells(&r, true);
+        assert!(texts(&snoozed).contains("07:39") && texts(&snoozed).contains("DELAYED"));
+        assert_eq!(
+            snoozed.len(),
+            alarm_cells(
+                &Ringing {
+                    snoozed_until: None,
+                    ..r
+                },
+                true
+            )
+            .len()
+        );
     }
 
     #[test]

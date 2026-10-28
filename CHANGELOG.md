@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Alarms have a **Reason**, for what each is for: when one rings, the end of its row flips to the reason, such as DENTIST, and stays there.
+- Fixed: a ringing alarm's row no longer keeps flipping between NOW and ALARM. It flips to NOW (or its reason) once and stops; DELAYED while it snoozes.
+
 - **Day and night**: an optional card at the end of each place's row, and after the main time, showing the sky there as a picture: morning (the sun rising over the horizon), day (the sun), evening (the sun setting into the sea) or night (the moon and stars). Morning is the hour around sunrise, from half an hour before to half an hour after, and evening the hour around sunset; they come from that place's own sunrise and sunset, worked out from where its time zone's city is, so midnight sun and polar night are right too. A place whose time is set by hand goes by its clock instead (sunrise at six, sunset at six). Turn it on in Settings, Display, **Day and night**: **Places** and **Main time**.
 
 ## 1.0.0 – 2026-10-28

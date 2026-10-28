@@ -22,8 +22,11 @@ pub struct Alarm {
     pub on: bool,
     pub hour: u32,
     pub minute: u32,
-    /// What the board says when it rings.
+    /// Its name on the board when it rings.
     pub label: String,
+    /// What it's for, which the board shows when it rings, where it would
+    /// otherwise say NOW.
+    pub reason: String,
     /// The days it rings, Monday first. With none ticked it rings once, at
     /// the next time it comes round, and then turns itself off.
     pub days: [bool; 7],
@@ -41,6 +44,7 @@ impl Default for Alarm {
             hour: 7,
             minute: 0,
             label: "ALARM".into(),
+            reason: String::new(),
             days: [false; 7],
             place: None,
             rang: None,
