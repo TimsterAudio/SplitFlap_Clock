@@ -1,0 +1,59 @@
+# Builds every branch but main, to try before it's merged: the checks, then
+# the Windows exe, the Linux binary and the user guide, as downloads on the
+# run's page (Actions, then the run, then Artifacts). It publishes nothing:
+# releases come only from main (release.yml).
+
+name: Preview
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            from: target/release/splitflap-clock
+            to: splitflap-clock-linux-x86_64
+          - os: windows-latest
+            from: target/release/splitflap-clock.exe
+            to: splitflap-clock.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+      - shell: bash
+        run: mkdir dist && cp "${{ matrix.from }}" "dist/${{ matrix.to }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splitflap-clock-preview-${{ runner.os }}
+          path: dist/*
+          retention-days: 30
+
+  guide:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splitflap-clock-preview-user-guide
+          path: |
+            Split-Flap Clock User Guide.html
+            Split-Flap Clock User Guide (dark).pdf
+            Split-Flap Clock User Guide (light).pdf
+          retention-days: 30

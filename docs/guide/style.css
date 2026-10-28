@@ -150,3 +150,11 @@ html.paged .theme-switch{display:none}
 html.paged,html.paged body{background:var(--panel)}
 html.paged main{max-width:none;border:0;padding:13mm 14mm;min-height:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 @page{size:A4;margin:0}
+
+/* The sky cards and the alarm's buttons, in the guide's boards */
+.sky-demo{font-size:46px;text-align:center}
+.sky-demo .sky-row{text-align:center}
+.fl.sky{width:1.1em;margin:0 .12em}
+.fl.sky svg{width:.78em;height:.78em;vertical-align:-.12em;fill:currentColor}
+.demo .row.buttons{text-align:center;margin-top:.5em}
+.btn{display:inline-block;border:1.5px solid var(--flap);border-radius:4px;padding:2px 3px;opacity:.9}
