@@ -1,0 +1,51 @@
+Timster's Audio Works is a project that started with my want for a simple, great sounding audio player for my laptop and desktop PCs.  A player without all the clutter that proliferates on many applications.
+It's been fun to do - and the result is Spool.  I had to restrain myself as it's easy to run away with features that end up on the sidelines anyway. Keep it simple as much as possible, but it did reveal some linmitations in the implemetation (Browser based, one HTML file)
+
+If you like Spool, or if you don't, that's OK.  I made it for me and it might not be for you.  All good!
+Spool can be found here : https://github.com/TimsterAudio/Spool/releases/tag/v1.6.0
+
+
+
+From that initial project others have grown and now I am working on a small application "family" desgned for me and my uses.  You may find them useful too.
+
+
+Music Player - Equaliser - Analyser - Library
+* A set of matched applications for managing your digital music library, a music player (born from Spool), an EQ and Spectrum Analyser
+* Stand alone applications.
+
+
+Isobar - A weather dashbaord and inisghts app for CumulusMX users : https://github.com/TimsterAudio/Isobar/releases
+Waypoint - A travel/trip planning app : SOON
+Solvent - Personal Finance App : MAYBE SOON
+* All of these are under active review and devopment and are also stand-alone apps.
+
+
+
+Drone Box : https://github.com/TimsterAudio/Drone-Box/releases
+Drum Box : https://github.com/TimsterAudio/Drum-Box/releases
+* Synths for some music making fun.... very much a work in progress
+
+
+
+If you use them or not, that's OK.  
+Regardless, if you want to send me some beer money to support my adventures, happy to accept your thanks!
+
+
+
+PayPal - spoolbeermoney@outlook.com
+
+
+            \   |   /
+         *   CLINK!   *
+            /   |   \
+   .-~~~~~~-.  .-~~~~~~-.
+  (  o  o  . )( .  o  o  )
+   |~~~~~~~~|  |~~~~~~~~|
+ __|  o  .  |  |  .  o  |__
+(__|    o   |  |   o    |__)
+ __| .    o |  | o    . |__
+(__|  o     |  |     o  |__)
+   |________|  |________|
+
+
+
