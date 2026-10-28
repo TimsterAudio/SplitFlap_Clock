@@ -11,6 +11,7 @@ departures.
 - As many other places as you like, each with its own name, time and day, from its time zone or set by hand
 - Group places into regions, with a heading each, in the order you choose
 - Colours of your own for the main time, the date and each place
+- Day and night: a card showing morning, day, evening or night at each place, from its own sunrise and sunset
 - The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
 - Alarms, announced by the board with an airport chime, by your time or any place's, with a 9-minute snooze

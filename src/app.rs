@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::alarm::{self, Alarm};
 use crate::flap::{Drum, Flap, Look};
 use crate::rng::Rng;
+use crate::sky::{sky, Sky};
 use crate::sound::{Click, Sound};
-use crate::{autostart, desktops};
+use crate::{autostart, desktops, places, sky};
 
 /// The longest zone name a row has cards for.
 pub const NAME_CARDS: usize = 12;
@@ -207,6 +208,10 @@ pub struct Saved {
     pub volume: f32,
     /// Clatter when the time changes too, not just for shows.
     pub clock_sound: bool,
+    /// The sky card, morning, day, evening or night: at the end of each
+    /// place's row, and after the main time.
+    pub sky_places: bool,
+    pub sky_main: bool,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -281,6 +286,8 @@ impl Default for Saved {
             sound: false,
             volume: 0.6,
             clock_sound: false,
+            sky_places: false,
+            sky_main: false,
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -417,13 +424,41 @@ fn date_cells(date: &str) -> Vec<Cell> {
         .collect()
 }
 
-fn zone_cells(label: &str, h: u32, m: u32, day: &str, h24: bool) -> Vec<Cell> {
+fn zone_cells(label: &str, h: u32, m: u32, day: &str, h24: bool, sky: Option<Sky>) -> Vec<Cell> {
     let mut cells = text_cards(label, NAME_CARDS);
     cells.push(Cell::Gap(18.0));
     cells.extend(time_cells(h, m, None, h24, false));
     cells.push(Cell::Gap(18.0));
     cells.extend(text_cards(day, 3));
+    if let Some(sky) = sky {
+        cells.push(Cell::Gap(10.0));
+        cells.push(sky_card(sky, SKY_SMALL));
+    }
     cells
+}
+
+// The sky card is wider than a letter's, for its picture.
+const SKY_SMALL: Vec2 = vec2(30.0, 32.0);
+const SKY_BIG: Vec2 = vec2(90.0, 100.0);
+
+fn sky_card(sky: Sky, size: Vec2) -> Cell {
+    Cell::Card {
+        drum: Drum::Sky,
+        text: sky.symbol().into(),
+        size,
+        font: 1.0,
+    }
+}
+
+/// Whether a row ends with a sky card.
+fn has_sky(cells: &[Cell]) -> bool {
+    matches!(
+        cells.last(),
+        Some(Cell::Card {
+            drum: Drum::Sky,
+            ..
+        })
+    )
 }
 
 /// An alarm that's ringing or snoozing.
@@ -522,6 +557,8 @@ pub struct ClockApp {
     desktops_error: Option<String>,
     /// Whether the clock starts at login, as the system has it.
     autostart: bool,
+    /// Where you are, from your system's time zone, for the main time's sky.
+    home: Option<(f64, f64)>,
     autostart_error: Option<String>,
     /// The refresh interval and the slot of it the clock is in.
     refresh_slot: Option<(i64, i64)>,
@@ -565,6 +602,9 @@ impl ClockApp {
             applied_all_desktops: false,
             desktops_error: None,
             autostart: autostart::enabled(),
+            home: iana_time_zone::get_timezone()
+                .ok()
+                .and_then(|tz| places::coords(&tz)),
             autostart_error: None,
             refresh_slot: None,
             next_random: None,
@@ -586,15 +626,21 @@ impl ClockApp {
         let now = chrono::Local::now();
         let s = &self.saved;
         let ink = self.ink();
+        let mut main = time_cells(
+            now.hour(),
+            now.minute(),
+            s.seconds.then(|| now.second()),
+            s.h24,
+            true,
+        );
+        if s.sky_main {
+            let local = sky::minutes(now.naive_local());
+            main.push(Cell::Gap(BIG.y * 0.16));
+            main.push(sky_card(sky(Utc::now(), self.home, local), SKY_BIG));
+        }
         let mut lines = vec![Line {
             key: "main".into(),
-            cells: time_cells(
-                now.hour(),
-                now.minute(),
-                s.seconds.then(|| now.second()),
-                s.h24,
-                true,
-            ),
+            cells: main,
             ink: s.time_colour.map_or(ink, rgb),
             heading: None,
             note: None,
@@ -612,26 +658,28 @@ impl ClockApp {
         let utc = Utc::now();
         let mut seen: HashMap<&str, usize> = HashMap::new();
         for (heading, z) in grouped(s) {
-            // The time there: by hand, or from its time zone.
-            let (h, m, day) = if let Some(off) = z.offset {
+            // The time there: by hand, or from its time zone. A place set by
+            // hand has no location, so its sky goes by its clock.
+            let (h, m, day, at) = if let Some(off) = z.offset {
                 let Some(fixed) = FixedOffset::east_opt(off * 60) else {
                     continue;
                 };
                 let t = utc.with_timezone(&fixed);
-                (t.hour(), t.minute(), t.weekday())
+                (t.hour(), t.minute(), t.weekday(), None)
             } else {
                 let Ok(tz) = Tz::from_str(&z.tz) else {
                     continue;
                 };
                 let t = utc.with_timezone(&tz);
-                (t.hour(), t.minute(), t.weekday())
+                (t.hour(), t.minute(), t.weekday(), places::coords(&z.tz))
             };
+            let sky = s.sky_places.then(|| sky(utc, at, (h * 60 + m) as i64));
             let n = seen.entry(&z.tz).or_default();
             *n += 1;
             let day = day.to_string().to_uppercase();
             lines.push(Line {
                 key: format!("zone:{}:{n}", z.tz),
-                cells: zone_cells(&z.label.to_uppercase(), h, m, &day, s.h24),
+                cells: zone_cells(&z.label.to_uppercase(), h, m, &day, s.h24, sky),
                 ink: z.colour.map_or(ink, rgb),
                 heading,
                 note: None,
@@ -950,7 +998,8 @@ impl ClockApp {
                     (1.0_f32.max(scale), RULE),
                 );
                 let time_x = x + row_width(&line.cells[..NAME_CARDS + 1]) + SMALL.y * SPACING;
-                let day_x = x + w - row_width(&line.cells[line.cells.len() - 3..]);
+                let tail = if has_sky(&line.cells) { 5 } else { 3 };
+                let day_x = x + w - row_width(&line.cells[line.cells.len() - tail..]);
                 for (cx, text) in [(x, "CITY"), (time_x, "TIME"), (day_x, "DAY")] {
                     painter.text(
                         u(cx, y - 8.0 - above),
@@ -1213,6 +1262,14 @@ impl ClockApp {
                     ui.checkbox(&mut s.seconds, "Seconds");
                     ui.checkbox(&mut s.date, "Date");
                 });
+                ui.end_row();
+                ui.label("Day and night");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut s.sky_places, "Places");
+                    ui.checkbox(&mut s.sky_main, "Main time");
+                })
+                .response
+                .on_hover_text("A card showing morning, day, evening or night there, from its sunrise and sunset");
                 ui.end_row();
                 ui.label("Refresh");
                 egui::ComboBox::from_id_salt("refresh")
@@ -1792,8 +1849,8 @@ mod tests {
 
     #[test]
     fn zone_rows_line_up() {
-        let a = zone_cells("LONDON", 9, 5, "MON", true);
-        let b = zone_cells("A NAME THAT IS FAR TOO LONG", 21, 30, "TUE", true);
+        let a = zone_cells("LONDON", 9, 5, "MON", true, None);
+        let b = zone_cells("A NAME THAT IS FAR TOO LONG", 21, 30, "TUE", true, None);
         assert_eq!(row_width(&a), row_width(&b));
     }
 

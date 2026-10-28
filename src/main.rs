@@ -7,7 +7,9 @@ mod autostart;
 mod desktops;
 mod flap;
 mod icon;
+mod places;
 mod rng;
+mod sky;
 mod sound;
 
 fn main() -> eframe::Result {

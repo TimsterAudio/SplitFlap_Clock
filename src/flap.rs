@@ -9,8 +9,10 @@
 use std::collections::VecDeque;
 use std::f32::consts::PI;
 
-use egui::epaint::{ClippedShape, Primitive};
-use egui::{pos2, Color32, Context, CornerRadius, FontId, Painter, Rect, Shape};
+use egui::epaint::{ClippedShape, PathShape, Primitive};
+use egui::{
+    pos2, vec2, Color32, Context, CornerRadius, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke,
+};
 
 /// The duration of a flip that lands on the wanted symbol, in seconds.
 const FLIP: f64 = 0.30;
@@ -18,6 +20,12 @@ const FLIP: f64 = 0.30;
 const FAST: f64 = 0.07;
 
 const ALPHA: &str = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+:/'&,()";
+
+/// The sky card's flaps, which are pictures rather than letters.
+pub const MORNING: &str = "<morning>";
+pub const DAY: &str = "<day>";
+pub const EVENING: &str = "<evening>";
+pub const NIGHT: &str = "<night>";
 
 /// The symbols a card can show, in the order they come round.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -34,6 +42,8 @@ pub enum Drum {
     AmPm,
     /// Letters, digits and a little punctuation, for names and dates.
     Alpha,
+    /// The sky: night, morning, day and evening, in the order a day goes.
+    Sky,
 }
 
 impl Drum {
@@ -45,6 +55,7 @@ impl Drum {
             Drum::Tens12 => 2,
             Drum::AmPm => 2,
             Drum::Alpha => ALPHA.len(),
+            Drum::Sky => 4,
         }
     }
 
@@ -56,6 +67,7 @@ impl Drum {
             Drum::Tens12 => &" 1"[i..=i],
             Drum::AmPm => ["AM", "PM"][i],
             Drum::Alpha => &ALPHA[i..=i],
+            Drum::Sky => [NIGHT, MORNING, DAY, EVENING][i],
         }
     }
 
@@ -302,6 +314,9 @@ impl Flap {
 
 /// `text` centred on the card, with every symbol on the same baseline.
 fn glyph(painter: &Painter, card: Rect, text: &str, font: &FontId, ink: Color32) -> Shape {
+    if let Some(picture) = picture(card, text, ink) {
+        return picture;
+    }
     let galley = painter.layout_no_wrap(text.to_string(), font.clone(), ink);
     // Centre on the ink of a digit rather than on the line, which has room
     // for descenders below.
@@ -316,6 +331,159 @@ fn glyph(painter: &Painter, card: Rect, text: &str, font: &FontId, ink: Color32)
         card.center().y - ink_mid,
     );
     Shape::galley(pos, galley, ink)
+}
+
+/// The sky card's pictures, solid in the card's ink: the sun rising over the
+/// horizon, the sun, the sun setting into the sea, and the moon and stars.
+fn picture(card: Rect, text: &str, ink: Color32) -> Option<Shape> {
+    let c = card.center();
+    // Half the picture's size.
+    let u = (card.width() * 0.9).min(card.height() * 0.64) / 2.0;
+    let line = Stroke::new(u * 0.13, ink);
+    let ray = |centre: Pos2, angle: f32, from: f32, to: f32| {
+        let d = vec2(angle.cos(), angle.sin());
+        Shape::line_segment([centre + d * from, centre + d * to], line)
+    };
+    let mut shapes = Vec::new();
+    match text {
+        DAY => {
+            shapes.push(Shape::circle_filled(c, u * 0.5, ink));
+            for k in 0..8 {
+                shapes.push(ray(c, k as f32 * PI / 4.0, u * 0.7, u * 0.98));
+            }
+        }
+        MORNING => {
+            let horizon = c.y + u * 0.3;
+            let sun = pos2(c.x, horizon);
+            shapes.push(Shape::convex_polygon(
+                half_disc(sun, u * 0.55),
+                ink,
+                Stroke::NONE,
+            ));
+            for k in 0..5 {
+                let a = PI + PI * (k as f32 + 1.0) / 6.0;
+                shapes.push(ray(sun, a, u * 0.72, u * 0.98));
+            }
+            let h = |y: f32, half: f32| {
+                Shape::line_segment([pos2(c.x - half, y), pos2(c.x + half, y)], line)
+            };
+            shapes.push(h(horizon + u * 0.08, u * 0.98));
+            shapes.push(h(horizon + u * 0.36, u * 0.6));
+        }
+        EVENING => {
+            let r = u * 0.78;
+            shapes.push(Shape::convex_polygon(half_disc(c, r), ink, Stroke::NONE));
+            // The lower half, sinking: bars across it, as the chords there.
+            for dy in [0.2, 0.46, 0.72] {
+                let y = c.y + r * dy;
+                let half = (r * r - (r * dy) * (r * dy)).sqrt();
+                shapes.push(Shape::line_segment(
+                    [pos2(c.x - half, y), pos2(c.x + half, y)],
+                    line,
+                ));
+            }
+        }
+        NIGHT => {
+            shapes.push(crescent(c + vec2(-u * 0.12, u * 0.05), u * 0.72, ink));
+            shapes.push(star(c + vec2(u * 0.6, -u * 0.58), u * 0.24, ink));
+            shapes.push(star(c + vec2(u * 0.78, u * 0.06), u * 0.16, ink));
+        }
+        _ => return None,
+    }
+    Some(Shape::Vec(shapes))
+}
+
+/// The top half of a disc, as a polygon.
+fn half_disc(centre: Pos2, r: f32) -> Vec<Pos2> {
+    (0..=24)
+        .map(|k| {
+            let a = PI + PI * k as f32 / 24.0;
+            centre + vec2(a.cos(), a.sin()) * r
+        })
+        .collect()
+}
+
+/// A crescent moon: a disc of radius `r` at `centre` with a bite out of its
+/// upper right, filled as a strip between its two edges, and outlined so
+/// the edges are smooth.
+fn crescent(centre: Pos2, r: f32, ink: Color32) -> Shape {
+    let bite = centre + vec2(r * 0.42, -r * 0.3);
+    let br = r * 0.82;
+    // The tips, where the two circles cross, as angles round each circle.
+    let d = (bite - centre).length();
+    let a = (r * r - br * br + d * d) / (2.0 * d);
+    let h = (r * r - a * a).max(0.0).sqrt();
+    let along = (bite - centre) / d;
+    let mid = centre + along * a;
+    let across = vec2(-along.y, along.x);
+    let (t1, t2) = (mid + across * h, mid - across * h);
+    let angle = |o: Pos2, p: Pos2| (p.y - o.y).atan2(p.x - o.x);
+    // The outer edge goes the long way round, away from the bite; the inner
+    // edge the short way, inside the moon.
+    let o1 = angle(centre, t1);
+    let o2 = arc_through(o1, angle(centre, t2), angle(centre, bite) + PI);
+    let i1 = angle(bite, t1);
+    let i2 = arc_through(i1, angle(bite, t2), angle(bite, centre));
+    const N: usize = 28;
+    let point = |o: Pos2, rr: f32, a: f32| o + vec2(a.cos(), a.sin()) * rr;
+    let outer: Vec<Pos2> = (0..=N)
+        .map(|k| point(centre, r, o1 + (o2 - o1) * k as f32 / N as f32))
+        .collect();
+    let inner: Vec<Pos2> = (0..=N)
+        .map(|k| point(bite, br, i1 + (i2 - i1) * k as f32 / N as f32))
+        .collect();
+    let mut mesh = Mesh::default();
+    for k in 0..=N {
+        mesh.colored_vertex(outer[k], ink);
+        mesh.colored_vertex(inner[k], ink);
+    }
+    for k in 0..N as u32 {
+        let (a, b, c, d) = (2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 3);
+        mesh.add_triangle(a, b, c);
+        mesh.add_triangle(b, d, c);
+    }
+    let mut edge = outer;
+    edge.extend(inner.into_iter().rev());
+    Shape::Vec(vec![
+        Shape::mesh(mesh),
+        Shape::Path(PathShape::closed_line(edge, Stroke::new(r * 0.04, ink))),
+    ])
+}
+
+/// The angle to go round to from `a` to reach `b`, by whichever way round
+/// passes `via`: `b` itself, or `b` a whole turn off, so that going from `a`
+/// to the result in a straight line of angles takes that way.
+fn arc_through(a: f32, b: f32, via: f32) -> f32 {
+    let turn = 2.0 * PI;
+    let forward = (b - a).rem_euclid(turn);
+    if (via - a).rem_euclid(turn) <= forward {
+        a + forward
+    } else {
+        a - (turn - forward)
+    }
+}
+
+/// A four-pointed twinkle of radius `r`.
+fn star(centre: Pos2, r: f32, ink: Color32) -> Shape {
+    let points: Vec<Pos2> = (0..8)
+        .map(|k| {
+            let a = k as f32 * PI / 4.0 - PI / 2.0;
+            let rr = if k % 2 == 0 { r } else { r * 0.32 };
+            centre + vec2(a.cos(), a.sin()) * rr
+        })
+        .collect();
+    let mut mesh = Mesh::default();
+    mesh.colored_vertex(centre, ink);
+    for p in &points {
+        mesh.colored_vertex(*p, ink);
+    }
+    for k in 0..8u32 {
+        mesh.add_triangle(0, 1 + k, 1 + (k + 1) % 8);
+    }
+    Shape::Vec(vec![
+        Shape::mesh(mesh),
+        Shape::Path(PathShape::closed_line(points, Stroke::new(r * 0.08, ink))),
+    ])
 }
 
 /// Draws `shape` squashed towards the line at `hinge` by `s`, as a flap
@@ -388,6 +556,25 @@ mod tests {
         f.turn("2", t, 0.0, 1.0);
         t += 1.0;
         assert!(f.tick(t).is_some_and(|f| f.show));
+    }
+
+    #[test]
+    fn arcs_go_the_way_round_asked() {
+        // From 0 to a quarter turn, the short way and the long way.
+        assert!((arc_through(0.0, PI / 2.0, PI / 4.0) - PI / 2.0).abs() < 1e-5);
+        assert!((arc_through(0.0, PI / 2.0, PI) - (PI / 2.0 - 2.0 * PI)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_sky_goes_round_in_the_order_of_a_day() {
+        assert_eq!(Drum::Sky.steps(NIGHT, MORNING), [MORNING]);
+        assert_eq!(Drum::Sky.steps(EVENING, NIGHT), [NIGHT]);
+        assert_eq!(Drum::Sky.turn(DAY, DAY), [EVENING, NIGHT, MORNING, DAY]);
+        let card = Rect::from_min_size(pos2(0.0, 0.0), vec2(30.0, 32.0));
+        for s in [MORNING, DAY, EVENING, NIGHT] {
+            assert!(picture(card, s, Color32::WHITE).is_some());
+        }
+        assert!(picture(card, "A", Color32::WHITE).is_none());
     }
 
     #[test]
