@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings opens next to the clock, to its right or, if there's no room, its left, instead of wherever the system puts new windows (on a widescreen, often the far side).
 - **Alarms**, in Settings: as many as you like, each with a time, a label for the board, the days it repeats (or once), and whose time it follows: yours, or any place on the board. When one goes off, the board clatters, a row flips in under the time saying NOW and ALARM by turns, and an airport chime plays every few seconds, at its own volume, whether the clatter is on or not. Click the board to snooze for 9 minutes (the row says DELAYED and when it will ring again); right-click or press Esc to stop it. **Test** rings an alarm straight away. If the clock wasn't running or the computer was asleep when an alarm was due, it still rings if that was less than 10 minutes ago, and an alarm nobody answers stops by itself after 30 minutes.
 
 ## 0.5.0 – 2026-10-28

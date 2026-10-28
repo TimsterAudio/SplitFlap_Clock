@@ -509,6 +509,9 @@ pub struct ClockApp {
     /// The cards on the board, by row.
     flaps: HashMap<String, Vec<Option<Flap>>>,
     settings_open: bool,
+    /// Where the settings window opens: next to the clock, worked out when
+    /// it opens.
+    settings_at: Option<egui::Pos2>,
     search: String,
     /// The time zone picked from the search results.
     picked: Option<String>,
@@ -554,6 +557,7 @@ impl ClockApp {
             saved,
             flaps: HashMap::new(),
             settings_open: false,
+            settings_at: None,
             search: String::new(),
             picked: None,
             applied_on_top: None,
@@ -1134,10 +1138,21 @@ impl ClockApp {
 
     fn settings(&mut self, ctx: &egui::Context) {
         let before = self.saved.scale;
-        let builder = egui::ViewportBuilder::default()
+        let size = vec2(560.0, 680.0);
+        if self.settings_at.is_none() {
+            let (clock, screen) =
+                ctx.input(|i| (i.viewport().outer_rect, i.viewport().monitor_size));
+            self.settings_at = clock.zip(screen).map(|(c, sc)| settings_spot(c, sc, size));
+        }
+        let mut builder = egui::ViewportBuilder::default()
             .with_title("Clock settings")
-            .with_inner_size([560.0, 680.0])
+            .with_inner_size(size)
             .with_min_inner_size([320.0, 380.0]);
+        // Next to the clock, where the system says where the clock is (not
+        // on Wayland, which places windows itself).
+        if let Some(at) = self.settings_at {
+            builder = builder.with_position(at);
+        }
         ctx.show_viewport_immediate(ViewportId::from_hash_of("settings"), builder, |ui, _| {
             if ui.input(|i| i.viewport().close_requested()) {
                 self.settings_open = false;
@@ -1610,6 +1625,9 @@ impl eframe::App for ClockApp {
         if self.settings_open {
             self.settings(&ctx);
         }
+        if !self.settings_open {
+            self.settings_at = None;
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -1619,6 +1637,29 @@ impl eframe::App for ClockApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BOARD.to_normalized_gamma_f32()
     }
+}
+
+/// Where the settings window goes, of `size`, for a clock window at `clock`
+/// on a screen of `screen`: to the clock's right if it fits, or else its
+/// left, level with its top, and kept on the screen. Screens side by side
+/// are taken to be the same size, as the system doesn't say where each one
+/// starts.
+fn settings_spot(clock: Rect, screen: Vec2, size: Vec2) -> egui::Pos2 {
+    const GAP: f32 = 12.0;
+    let left = (clock.center().x / screen.x).floor() * screen.x;
+    let top = (clock.center().y / screen.y).floor() * screen.y;
+    let right_edge = left + screen.x;
+    let x = if clock.max.x + GAP + size.x <= right_edge {
+        clock.max.x + GAP
+    } else if clock.min.x - GAP - size.x >= left {
+        clock.min.x - GAP - size.x
+    } else {
+        // No room either side: as close as it will go on the right.
+        (right_edge - size.x).max(left)
+    };
+    // Room for the title bar and a taskbar at the bottom.
+    let y = clock.min.y.min(top + screen.y - size.y - 80.0).max(top);
+    egui::pos2(x, y)
 }
 
 /// A colour button for something that can have its own colour, with a box
@@ -1858,6 +1899,31 @@ mod tests {
         r.shown = (7, 39);
         let row = texts(&alarm_cells(&r, true, 0));
         assert!(row.contains("07:39") && row.contains("DELAYED"));
+    }
+
+    #[test]
+    fn settings_open_next_to_the_clock() {
+        let screen = vec2(3440.0, 1440.0);
+        let size = vec2(560.0, 680.0);
+        let clock = |x: f32, y: f32| Rect::from_min_size(egui::pos2(x, y), vec2(550.0, 330.0));
+        // Room on the right: just to the right, level with the top.
+        assert_eq!(
+            settings_spot(clock(100.0, 200.0), screen, size),
+            egui::pos2(662.0, 200.0)
+        );
+        // At the right edge: on the left instead.
+        assert_eq!(
+            settings_spot(clock(2850.0, 200.0), screen, size),
+            egui::pos2(2278.0, 200.0)
+        );
+        // Low on the screen: moved up to fit.
+        assert_eq!(
+            settings_spot(clock(100.0, 1000.0), screen, size).y,
+            1440.0 - 680.0 - 80.0
+        );
+        // On a second screen to the right, it stays on that screen.
+        let p = settings_spot(clock(3440.0 + 2850.0, 200.0), screen, size);
+        assert!(p.x >= 3440.0 && p.x + size.x <= 2.0 * 3440.0);
     }
 
     #[test]
