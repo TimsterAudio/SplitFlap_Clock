@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use chrono::{Datelike, FixedOffset, Timelike, Utc};
 use chrono_tz::Tz;
 use egui::{
     vec2, Align2, Color32, FontFamily, FontId, Rect, Sense, Ui, Vec2, ViewportCommand, ViewportId,
@@ -17,11 +17,13 @@ use crate::{autostart, desktops};
 
 /// The longest zone name a row has cards for.
 pub const NAME_CARDS: usize = 12;
-const MAX_ZONES: usize = 10;
+/// The longest region name.
+const REGION_CHARS: usize = 24;
 
 const BOARD: Color32 = Color32::from_rgb(10, 10, 10);
 const RULE: Color32 = Color32::from_rgb(38, 38, 36);
 const CAPTION: Color32 = Color32::from_rgb(130, 128, 118);
+const REGION: Color32 = Color32::from_rgb(200, 198, 188);
 const YELLOW: Color32 = Color32::from_rgb(244, 196, 48);
 const WHITE: Color32 = Color32::from_rgb(236, 234, 226);
 
@@ -32,12 +34,107 @@ pub enum Ink {
     White,
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Zone {
     /// The IANA name, such as `Europe/London`.
     pub tz: String,
     /// What the row says, up to [`NAME_CARDS`] characters.
     pub label: String,
+    /// The group the city is shown in on the board; empty for none.
+    #[serde(default)]
+    pub region: String,
+    /// Its own colour, or the board's when `None`.
+    #[serde(default)]
+    pub colour: Option<[u8; 3]>,
+    /// Minutes ahead of UTC, when its time is set by hand rather than
+    /// taken from its time zone.
+    #[serde(default)]
+    pub offset: Option<i32>,
+}
+
+impl Zone {
+    pub fn new(tz: &str) -> Self {
+        Self {
+            tz: tz.to_string(),
+            label: default_label(tz),
+            region: String::new(),
+            colour: None,
+            offset: None,
+        }
+    }
+
+    /// The region as the board shows it, and as zones are grouped by.
+    fn region_key(&self) -> String {
+        self.region.trim().to_uppercase()
+    }
+
+    /// Its offset from UTC now, in minutes: set by hand, or its time zone's.
+    fn offset_now(&self) -> Option<i32> {
+        use chrono::Offset;
+        self.offset.or_else(|| {
+            let tz = Tz::from_str(&self.tz).ok()?;
+            Some(
+                Utc::now()
+                    .with_timezone(&tz)
+                    .offset()
+                    .fix()
+                    .local_minus_utc()
+                    / 60,
+            )
+        })
+    }
+}
+
+/// The regions in the order the board shows them: the saved order first,
+/// then any new ones in the order their first city comes. Empty is the
+/// cities with no region.
+fn region_order(saved: &Saved) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let used: Vec<String> = saved.zones.iter().map(Zone::region_key).collect();
+    for r in saved.region_order.iter().chain(&used) {
+        if used.contains(r) && !out.contains(r) {
+            out.push(r.clone());
+        }
+    }
+    out
+}
+
+/// The zones grouped by region, in region order and then list order, each
+/// with the region heading it starts, if it starts one.
+fn grouped(saved: &Saved) -> Vec<(Option<String>, &Zone)> {
+    let mut out = Vec::new();
+    for (n, region) in region_order(saved).into_iter().enumerate() {
+        // Places with no region need a heading too, unless they come first,
+        // or they would look part of the region above.
+        let title = match region.as_str() {
+            "" if n == 0 => None,
+            "" => Some("OTHER".to_string()),
+            r => Some(r.to_string()),
+        };
+        let mut first = true;
+        for z in saved.zones.iter().filter(|z| z.region_key() == region) {
+            let heading = if first { title.clone() } else { None };
+            out.push((heading, z));
+            first = false;
+        }
+    }
+    out
+}
+
+/// The offset from UTC, in minutes, that makes the time there `local`
+/// (minutes past midnight) when it is `utc` in UTC. Of the two offsets a
+/// day apart that do, the one nearer `near` wins, so changing the time by
+/// a little doesn't change the day.
+fn offset_for(local: i32, utc: i32, near: i32) -> i32 {
+    let d = (local - utc).rem_euclid(24 * 60);
+    let later = d;
+    let earlier = d - 24 * 60;
+    let pick = if (later - near).abs() <= (earlier - near).abs() {
+        later
+    } else {
+        earlier
+    };
+    pick.clamp(-(24 * 60 - 1), 24 * 60 - 1)
 }
 
 /// How often every card on the board spins round once, as a real board
@@ -105,6 +202,11 @@ pub struct Saved {
     pub volume: f32,
     /// Clatter when the time changes too, not just for shows.
     pub clock_sound: bool,
+    /// Their own colours for the main time and the date, or the board's.
+    pub time_colour: Option<[u8; 3]>,
+    pub date_colour: Option<[u8; 3]>,
+    /// The order of the regions down the board.
+    pub region_order: Vec<String>,
 }
 
 impl Default for Saved {
@@ -124,6 +226,9 @@ impl Default for Saved {
             sound: false,
             volume: 0.6,
             clock_sound: false,
+            time_colour: None,
+            date_colour: None,
+            region_order: Vec::new(),
         }
     }
 }
@@ -169,6 +274,16 @@ const PAD: f32 = 26.0;
 struct Line {
     key: String,
     cells: Vec<Cell>,
+    ink: Color32,
+    /// A region heading over the line, for the first city of a region.
+    heading: Option<String>,
+}
+
+/// The room a region heading takes above its first city.
+const HEADING: f32 = 26.0;
+
+fn rgb(c: [u8; 3]) -> Color32 {
+    Color32::from_rgb(c[0], c[1], c[2])
 }
 
 fn time_cells(h: u32, m: u32, s: Option<u32>, h24: bool, big: bool) -> Vec<Cell> {
@@ -240,13 +355,12 @@ fn date_cells(date: &str) -> Vec<Cell> {
         .collect()
 }
 
-fn zone_cells<T: TimeZone>(label: &str, t: &DateTime<T>, h24: bool) -> Vec<Cell> {
+fn zone_cells(label: &str, h: u32, m: u32, day: &str, h24: bool) -> Vec<Cell> {
     let mut cells = text_cards(label, NAME_CARDS);
     cells.push(Cell::Gap(18.0));
-    cells.extend(time_cells(t.hour(), t.minute(), None, h24, false));
+    cells.extend(time_cells(h, m, None, h24, false));
     cells.push(Cell::Gap(18.0));
-    let day = t.weekday().to_string().to_uppercase();
-    cells.extend(text_cards(&day, 3));
+    cells.extend(text_cards(day, 3));
     cells
 }
 
@@ -277,6 +391,8 @@ pub struct ClockApp {
     flaps: HashMap<String, Vec<Option<Flap>>>,
     settings_open: bool,
     search: String,
+    /// The time zone picked from the search results.
+    picked: Option<String>,
     /// The window state last asked of the system.
     applied_on_top: Option<bool>,
     applied_frameless: Option<bool>,
@@ -315,6 +431,7 @@ impl ClockApp {
             flaps: HashMap::new(),
             settings_open: false,
             search: String::new(),
+            picked: None,
             applied_on_top: None,
             applied_frameless: None,
             applied_all_desktops: false,
@@ -338,6 +455,7 @@ impl ClockApp {
     fn lines(&self) -> Vec<Line> {
         let now = chrono::Local::now();
         let s = &self.saved;
+        let ink = self.ink();
         let mut lines = vec![Line {
             key: "main".into(),
             cells: time_cells(
@@ -347,25 +465,43 @@ impl ClockApp {
                 s.h24,
                 true,
             ),
+            ink: s.time_colour.map_or(ink, rgb),
+            heading: None,
         }];
         if s.date {
             let date = now.format("%a %d %b %Y").to_string().to_uppercase();
             lines.push(Line {
                 key: "date".into(),
                 cells: date_cells(&date),
+                ink: s.date_colour.map_or(ink, rgb),
+                heading: None,
             });
         }
         let utc = Utc::now();
         let mut seen: HashMap<&str, usize> = HashMap::new();
-        for z in &s.zones {
-            let Ok(tz) = Tz::from_str(&z.tz) else {
-                continue;
+        for (heading, z) in grouped(s) {
+            // The time there: by hand, or from its time zone.
+            let (h, m, day) = if let Some(off) = z.offset {
+                let Some(fixed) = FixedOffset::east_opt(off * 60) else {
+                    continue;
+                };
+                let t = utc.with_timezone(&fixed);
+                (t.hour(), t.minute(), t.weekday())
+            } else {
+                let Ok(tz) = Tz::from_str(&z.tz) else {
+                    continue;
+                };
+                let t = utc.with_timezone(&tz);
+                (t.hour(), t.minute(), t.weekday())
             };
             let n = seen.entry(&z.tz).or_default();
             *n += 1;
+            let day = day.to_string().to_uppercase();
             lines.push(Line {
                 key: format!("zone:{}:{n}", z.tz),
-                cells: zone_cells(&z.label.to_uppercase(), &utc.with_timezone(&tz), s.h24),
+                cells: zone_cells(&z.label.to_uppercase(), h, m, &day, s.h24),
+                ink: z.colour.map_or(ink, rgb),
+                heading,
             });
         }
         lines
@@ -390,6 +526,15 @@ impl ClockApp {
     /// The space above line `i`, with room for the rule and the column
     /// captions above the first zone.
     fn gap_before(lines: &[Line], i: usize) -> f32 {
+        let heading = if lines[i].heading.is_some() {
+            HEADING
+        } else {
+            0.0
+        };
+        heading + Self::rows_gap(lines, i)
+    }
+
+    fn rows_gap(lines: &[Line], i: usize) -> f32 {
         let zone = lines[i].key.starts_with("zone");
         if zone && !lines[i - 1].key.starts_with("zone") {
             56.0
@@ -400,16 +545,21 @@ impl ClockApp {
         }
     }
 
+    /// The board's own colour, which anything without its own uses.
+    fn ink(&self) -> Color32 {
+        match self.saved.ink {
+            Ink::Yellow => YELLOW,
+            Ink::White => WHITE,
+        }
+    }
+
     fn look(&self) -> Look {
         Look {
             top: Color32::from_rgb(36, 36, 35),
             bottom: Color32::from_rgb(29, 29, 28),
             split: Color32::from_rgb(4, 4, 4),
             hinge: Color32::from_rgb(70, 70, 68),
-            ink: match self.saved.ink {
-                Ink::Yellow => YELLOW,
-                Ink::White => WHITE,
-            },
+            ink: self.ink(),
         }
     }
 
@@ -469,9 +619,15 @@ impl ClockApp {
     }
 
     fn resize(&mut self, ctx: &egui::Context, board: Vec2, time: f64) {
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize(
-            (board * self.saved.scale).round(),
-        ));
+        let mut size = board * self.saved.scale;
+        // A long list of cities mustn't make the window taller than the
+        // screen; the board shrinks to fit instead.
+        if let Some(screen) = ctx.input(|i| i.viewport().monitor_size) {
+            size *= (screen.x * 0.95 / size.x)
+                .min(screen.y * 0.9 / size.y)
+                .min(1.0);
+        }
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size.round()));
         self.resized_at = time;
     }
 
@@ -524,12 +680,13 @@ impl ClockApp {
         let origin = full.center() - board * scale / 2.0;
         let u = |x: f32, y: f32| origin + vec2(x, y) * scale;
 
-        let look = self.look();
+        let base = self.look();
         let refresh = self.refresh_due(time) | std::mem::take(&mut self.refresh_now);
         let mut busy = false;
         let mut y = PAD;
         let mut first_zone = true;
         let caption = FontId::new(11.0 * scale, FontFamily::Name("flap".into()));
+        let region_font = FontId::new(15.0 * scale, FontFamily::Name("flap".into()));
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
                 y += Self::gap_before(&lines, i);
@@ -537,10 +694,25 @@ impl ClockApp {
             let w = row_width(&line.cells);
             let h = row_height(&line.cells);
             let mut x = (board.x - w) / 2.0;
+            let look = Look {
+                ink: line.ink,
+                ..base
+            };
+            // The rule and the column captions sit above any region heading.
+            let above = if line.heading.is_some() { HEADING } else { 0.0 };
+            if let Some(heading) = &line.heading {
+                painter.text(
+                    u(x, y - 7.0),
+                    Align2::LEFT_BOTTOM,
+                    heading,
+                    region_font.clone(),
+                    REGION,
+                );
+            }
 
             if line.key.starts_with("zone") && first_zone {
                 first_zone = false;
-                let rule_y = y - 40.0;
+                let rule_y = y - 40.0 - above;
                 painter.hline(
                     u(PAD, rule_y).x..=u(board.x - PAD, rule_y).x,
                     u(0.0, rule_y).y,
@@ -550,7 +722,7 @@ impl ClockApp {
                 let day_x = x + w - row_width(&line.cells[line.cells.len() - 3..]);
                 for (cx, text) in [(x, "CITY"), (time_x, "TIME"), (day_x, "DAY")] {
                     painter.text(
-                        u(cx, y - 8.0),
+                        u(cx, y - 8.0 - above),
                         Align2::LEFT_BOTTOM,
                         text,
                         caption.clone(),
@@ -706,7 +878,7 @@ impl ClockApp {
         let before = self.saved.scale;
         let builder = egui::ViewportBuilder::default()
             .with_title("Clock settings")
-            .with_inner_size([400.0, 560.0])
+            .with_inner_size([560.0, 680.0])
             .with_min_inner_size([320.0, 380.0]);
         ctx.show_viewport_immediate(ViewportId::from_hash_of("settings"), builder, |ui, _| {
             if ui.input(|i| i.viewport().close_requested()) {
@@ -734,6 +906,19 @@ impl ClockApp {
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut s.ink, Ink::Yellow, "Yellow");
                     ui.radio_value(&mut s.ink, Ink::White, "White");
+                });
+                ui.end_row();
+                ui.label("Colours");
+                ui.horizontal(|ui| {
+                    let ink = match s.ink {
+                        Ink::Yellow => YELLOW,
+                        Ink::White => WHITE,
+                    };
+                    ui.label("Time");
+                    colour_choice(ui, "time", &mut s.time_colour, ink);
+                    ui.add_space(8.0);
+                    ui.label("Date");
+                    colour_choice(ui, "date", &mut s.date_colour, ink);
                 });
                 ui.end_row();
                 ui.label("Hours");
@@ -835,44 +1020,162 @@ impl ClockApp {
                 ui.end_row();
             });
 
+        // Adding a place: search, pick, Add.
         ui.add_space(12.0);
-        ui.heading("Other time zones");
-        ui.label("They are listed under the main clock, in this order.");
+        ui.heading("Add a place");
+        let q = self.search.trim().to_lowercase().replace(' ', "_");
+        let found: Vec<&'static str> = if q.is_empty() {
+            Vec::new()
+        } else {
+            chrono_tz::TZ_VARIANTS
+                .iter()
+                .map(|tz| tz.name())
+                .filter(|name| name.to_lowercase().contains(&q))
+                .collect()
+        };
+        if self.picked.as_deref().is_some_and(|p| !found.contains(&p)) {
+            self.picked = None;
+        }
+        // The one picked from the list, or else the best match.
+        let choice = self.picked.clone().or(found.first().map(|f| f.to_string()));
+        let mut add = false;
+        ui.horizontal(|ui| {
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut self.search)
+                    .hint_text("Search, e.g. Tokyo or New York")
+                    .desired_width(240.0),
+            );
+            add |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let label = match &choice {
+                Some(c) => format!("Add {}", default_label(c)),
+                None => "Add".into(),
+            };
+            add |= ui
+                .add_enabled(choice.is_some(), egui::Button::new(label))
+                .clicked();
+        });
+        if let (true, Some(c)) = (add, &choice) {
+            s.zones.push(Zone::new(c));
+            self.search.clear();
+            self.picked = None;
+        }
+        if !q.is_empty() {
+            egui::ScrollArea::vertical()
+                .id_salt("found")
+                .max_height(180.0)
+                .show(ui, |ui| {
+                    for name in &found {
+                        let on = choice.as_deref() == Some(*name);
+                        if ui.selectable_label(on, *name).clicked() {
+                            self.picked = Some(name.to_string());
+                        }
+                    }
+                    if found.is_empty() {
+                        ui.label(egui::RichText::new("No time zone matches.").weak());
+                    }
+                });
+        }
+
+        ui.add_space(12.0);
+        ui.heading("Other places");
+        ui.label("Listed under the main clock, grouped by region, in this order.");
         ui.add_space(4.0);
+        let board_ink = match s.ink {
+            Ink::Yellow => YELLOW,
+            Ink::White => WHITE,
+        };
+        let utc = Utc::now();
+        let utc_min = (utc.hour() * 60 + utc.minute()) as i32;
         let mut remove = None;
         let mut swap = None;
         let n = s.zones.len();
-        egui::Grid::new("zones")
-            .num_columns(4)
-            .spacing([8.0, 6.0])
-            .show(ui, |ui| {
-                for (i, z) in s.zones.iter_mut().enumerate() {
+        for (i, z) in s.zones.iter_mut().enumerate() {
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
                     let edit = egui::TextEdit::singleline(&mut z.label)
                         .char_limit(NAME_CARDS)
-                        .desired_width(110.0);
-                    ui.add_sized([110.0, 20.0], edit)
-                        .on_hover_text("The name shown on the board");
+                        .desired_width(120.0);
+                    ui.add(edit).on_hover_text("The name shown on the board");
                     ui.label(egui::RichText::new(&z.tz).weak());
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add_enabled(i > 0, egui::Button::new("⏶").small())
-                            .clicked()
-                        {
-                            swap = Some(i - 1);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(i);
                         }
                         if ui
                             .add_enabled(i + 1 < n, egui::Button::new("⏷").small())
+                            .on_hover_text("Move down")
                             .clicked()
                         {
                             swap = Some(i);
                         }
+                        if ui
+                            .add_enabled(i > 0, egui::Button::new("⏶").small())
+                            .on_hover_text("Move up")
+                            .clicked()
+                        {
+                            swap = Some(i - 1);
+                        }
                     });
-                    if ui.small_button("Remove").clicked() {
-                        remove = Some(i);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Region");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut z.region)
+                            .char_limit(REGION_CHARS)
+                            .desired_width(120.0)
+                            .hint_text("e.g. Europe"),
+                    );
+                    ui.add_space(8.0);
+                    ui.label("Colour");
+                    colour_choice(ui, ("place", i), &mut z.colour, board_ink);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Time");
+                    let mut by_hand = z.offset.is_some();
+                    let from_zone = ui.radio_value(&mut by_hand, false, "From its time zone");
+                    let manual = ui.radio_value(&mut by_hand, true, "Set by hand");
+                    if manual.changed() && by_hand {
+                        // Start from the time it is there now, so nothing jumps.
+                        z.offset = Some(z.offset_now().unwrap_or(0));
                     }
-                    ui.end_row();
+                    if from_zone.changed() && !by_hand {
+                        z.offset = None;
+                    }
+                });
+                if let Some(off) = z.offset {
+                    ui.horizontal(|ui| {
+                        ui.add_space(36.0);
+                        let local = (utc_min + off).rem_euclid(24 * 60);
+                        let (mut h, mut m) = (local / 60, local % 60);
+                        let dh = ui.add(
+                            egui::DragValue::new(&mut h)
+                                .range(0..=23)
+                                .custom_formatter(|v, _| format!("{v:02}")),
+                        );
+                        ui.label(":");
+                        let dm = ui.add(
+                            egui::DragValue::new(&mut m)
+                                .range(0..=59)
+                                .custom_formatter(|v, _| format!("{v:02}")),
+                        );
+                        if dh.changed() || dm.changed() {
+                            z.offset = Some(offset_for(h * 60 + m, utc_min, off));
+                        }
+                        let off = z.offset.unwrap_or(off);
+                        let sign = if off < 0 { '-' } else { '+' };
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "UTC{sign}{:02}:{:02}, no summer time",
+                                off.abs() / 60,
+                                off.abs() % 60
+                            ))
+                            .weak(),
+                        );
+                    });
                 }
             });
+        }
         if let Some(i) = swap {
             s.zones.swap(i, i + 1);
         }
@@ -883,46 +1186,46 @@ impl ClockApp {
             ui.label(egui::RichText::new("None yet.").weak());
         }
 
-        ui.add_space(8.0);
-        if s.zones.len() >= MAX_ZONES {
-            ui.label(format!("The board holds up to {MAX_ZONES} zones."));
-            return;
-        }
-        ui.horizontal(|ui| {
-            ui.label("Add");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.search)
-                    .hint_text("Search, e.g. Tokyo or New York"),
-            );
-        });
-        let q = self.search.trim().to_lowercase().replace(' ', "_");
-        if q.is_empty() {
-            return;
-        }
-        egui::ScrollArea::vertical()
-            .id_salt("found")
-            .max_height(180.0)
-            .show(ui, |ui| {
-                let mut found = 0;
-                for tz in chrono_tz::TZ_VARIANTS.iter() {
-                    let name = tz.name();
-                    if !name.to_lowercase().contains(&q) {
-                        continue;
-                    }
-                    found += 1;
-                    if ui.selectable_label(false, name).clicked() {
-                        s.zones.push(Zone {
-                            tz: name.to_string(),
-                            label: default_label(name),
+        // Regions, in the order they go down the board.
+        s.region_order = region_order(s);
+        if s.region_order.iter().any(|r| !r.is_empty()) {
+            ui.add_space(12.0);
+            ui.heading("Regions");
+            ui.label("Their order down the board.");
+            let mut swap = None;
+            let n = s.region_order.len();
+            egui::Grid::new("regions")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    for (i, r) in s.region_order.iter().enumerate() {
+                        if r.is_empty() {
+                            ui.label(egui::RichText::new("Places with no region").italics())
+                                .on_hover_text("Shown under OTHER, unless they come first");
+                        } else {
+                            ui.label(r);
+                        }
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_enabled(i > 0, egui::Button::new("⏶").small())
+                                .clicked()
+                            {
+                                swap = Some(i - 1);
+                            }
+                            if ui
+                                .add_enabled(i + 1 < n, egui::Button::new("⏷").small())
+                                .clicked()
+                            {
+                                swap = Some(i);
+                            }
                         });
-                        self.search.clear();
-                        break;
+                        ui.end_row();
                     }
-                }
-                if found == 0 {
-                    ui.label(egui::RichText::new("No time zone matches.").weak());
-                }
-            });
+                });
+            if let Some(i) = swap {
+                s.region_order.swap(i, i + 1);
+            }
+        }
     }
 }
 
@@ -954,6 +1257,87 @@ impl eframe::App for ClockApp {
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BOARD.to_normalized_gamma_f32()
+    }
+}
+
+/// A colour button for something that can have its own colour, with a box
+/// to type or paste a colour into, and a way back to the board's colour.
+/// The picker's own copy button gives "R, G, B", which the box takes too.
+fn colour_choice(
+    ui: &mut Ui,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &mut Option<[u8; 3]>,
+    board: Color32,
+) {
+    let mut c = value.unwrap_or([board.r(), board.g(), board.b()]);
+    if egui::color_picker::color_edit_button_srgb(ui, &mut c).changed() {
+        *value = Some(c);
+    }
+    // While the box is being typed in, it keeps what was typed; otherwise
+    // it shows the colour.
+    let id = ui.id().with(&salt).with("hex");
+    let mut text = ui
+        .data_mut(|d| d.get_temp::<String>(id))
+        .unwrap_or_else(|| hex(value.unwrap_or(c)));
+    let r = ui
+        .add(
+            egui::TextEdit::singleline(&mut text)
+                .id_salt((&salt, "hex box"))
+                .desired_width(66.0)
+                .font(egui::TextStyle::Monospace)
+                .hint_text("#RRGGBB"),
+        )
+        .on_hover_text("Type or paste a colour: #RRGGBB, #RGB, or R, G, B");
+    if r.changed() {
+        if let Some(p) = parse_colour(&text) {
+            *value = Some(p);
+        }
+    }
+    if r.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, text));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
+    }
+    if value.is_some()
+        && ui
+            .small_button("Reset")
+            .on_hover_text("Back to the board's colour")
+            .clicked()
+    {
+        *value = None;
+    }
+}
+
+fn hex(c: [u8; 3]) -> String {
+    format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+}
+
+/// A colour as people write it: `#RRGGBB` or `#RGB`, with or without the
+/// `#`, or three numbers from 0 to 255, as in `255, 136, 0` or
+/// `rgb(255, 136, 0)`.
+fn parse_colour(text: &str) -> Option<[u8; 3]> {
+    let t = text.trim();
+    if t.contains(',') {
+        let nums: Vec<u8> = t
+            .trim_start_matches("rgb")
+            .trim_matches(|c| c == '(' || c == ')')
+            .split(',')
+            .map(|n| n.trim().parse().ok())
+            .collect::<Option<_>>()?;
+        return <[u8; 3]>::try_from(nums).ok();
+    }
+    let h = t.trim_start_matches('#');
+    if !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |s: &str| u8::from_str_radix(s, 16).ok();
+    match h.len() {
+        6 => Some([byte(&h[0..2])?, byte(&h[2..4])?, byte(&h[4..6])?]),
+        3 => {
+            let d = |i: usize| byte(&h[i..=i]).map(|v| v * 17);
+            Some([d(0)?, d(1)?, d(2)?])
+        }
+        _ => None,
     }
 }
 
@@ -1006,8 +1390,8 @@ mod tests {
 
     #[test]
     fn zone_rows_line_up() {
-        let a = zone_cells("LONDON", &Utc::now(), true);
-        let b = zone_cells("A NAME THAT IS FAR TOO LONG", &Utc::now(), true);
+        let a = zone_cells("LONDON", 9, 5, "MON", true);
+        let b = zone_cells("A NAME THAT IS FAR TOO LONG", 21, 30, "TUE", true);
         assert_eq!(row_width(&a), row_width(&b));
     }
 
@@ -1015,5 +1399,75 @@ mod tests {
     fn old_saves_still_load() {
         let s: Saved = ron::from_str("(h24: false)").unwrap();
         assert!(!s.h24 && s.date && s.zones.is_empty());
+        // A place saved before regions, colours and hand-set times.
+        let s: Saved = ron::from_str("(zones: [(tz: \"Asia/Tokyo\", label: \"TOKYO\")])").unwrap();
+        assert_eq!(s.zones[0], Zone::new("Asia/Tokyo"));
+    }
+
+    fn place(tz: &str, region: &str) -> Zone {
+        Zone {
+            region: region.into(),
+            ..Zone::new(tz)
+        }
+    }
+
+    #[test]
+    fn places_group_by_region_in_order() {
+        let mut s = Saved {
+            zones: vec![
+                place("Europe/London", "Europe"),
+                place("Asia/Tokyo", "asia "),
+                place("Europe/Paris", "EUROPE"),
+                place("UTC", ""),
+            ],
+            ..Saved::default()
+        };
+        let names = |s: &Saved| -> Vec<(Option<String>, String)> {
+            grouped(s)
+                .into_iter()
+                .map(|(h, z)| (h, z.tz.clone()))
+                .collect()
+        };
+        let europe = Some("EUROPE".to_string());
+        let asia = Some("ASIA".to_string());
+        assert_eq!(
+            names(&s),
+            [
+                (europe.clone(), "Europe/London".into()),
+                (None, "Europe/Paris".into()),
+                (asia.clone(), "Asia/Tokyo".into()),
+                (Some("OTHER".into()), "UTC".into()),
+            ]
+        );
+        // A saved order wins; regions it leaves out follow.
+        s.region_order = vec!["".into(), "ASIA".into(), "GONE".into()];
+        assert_eq!(region_order(&s), ["", "ASIA", "EUROPE"]);
+        assert_eq!(names(&s)[0], (None, "UTC".into()));
+        assert_eq!(names(&s)[1], (asia, "Asia/Tokyo".into()));
+    }
+
+    #[test]
+    fn colours_paste_in_any_usual_form() {
+        let orange = Some([255, 136, 0]);
+        assert_eq!(parse_colour("#FF8800"), orange);
+        assert_eq!(parse_colour(" ff8800 "), orange);
+        assert_eq!(parse_colour("#f80"), orange);
+        // What the picker's copy button gives.
+        assert_eq!(parse_colour("255, 136, 0"), orange);
+        assert_eq!(parse_colour("rgb(255,136,0)"), orange);
+        assert_eq!(parse_colour("#FF88"), None);
+        assert_eq!(parse_colour("256, 0, 0"), None);
+        assert_eq!(parse_colour("1, 2"), None);
+        assert_eq!(parse_colour("orange"), None);
+        assert_eq!(hex([255, 136, 0]), "#FF8800");
+    }
+
+    #[test]
+    fn hand_set_times_keep_their_day() {
+        // 10:00 UTC; it's 15:30 there: UTC+05:30.
+        assert_eq!(offset_for(15 * 60 + 30, 600, 0), 330);
+        // 23:00 there could be UTC+13 or UTC-11; near -10 it's -11.
+        assert_eq!(offset_for(23 * 60, 600, -600), -660);
+        assert_eq!(offset_for(23 * 60, 600, 720), 780);
     }
 }
