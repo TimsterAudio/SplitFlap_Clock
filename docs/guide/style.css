@@ -1,0 +1,152 @@
+:root{--page:#0b0b0a;--panel:#151514;--legend:#ece8dd;--dim:#a29d92;--frame:rgba(236,232,221,.26);
+  --yellow:#f4c430;--amber:#e8862a;--orange:#c85a19;--brown:#7a4a24;--cream:#e8e2cf;--red:#d2502e;--green:#5aa86f;--blue:#4f8cc9;
+  --card-top:#262625;--card-bottom:#1e1e1d;--split:#050505;--flap:#f4c430;
+  --box:#121211;--edge:#262420;--key:#222;--tint:rgba(244,196,48,.06);--perf:rgba(244,196,48,.55);
+  --switch:"\2600  Light pages";color-scheme:dark}
+/* Light pages: the text on timetable paper; the boards stay black. They follow the
+   system's setting, and the switch at the top flips them either way. */
+@media (prefers-color-scheme:light){:root:not(:has(#theme:checked)){--page:#ddd5bf;--panel:#f6f1e3;--legend:#22201b;--dim:#6b655a;--frame:rgba(40,30,20,.24);--cream:#4a3420;
+  --yellow:#9a5c00;--amber:#b0651c;--red:#b23a1c;--green:#2f7d47;--blue:#2c64a0;
+  --box:#ede6d3;--edge:#c9bfa5;--key:#fffdf6;--tint:rgba(154,92,0,.07);--perf:rgba(154,92,0,.45);
+  --switch:"\263E  Dark pages";color-scheme:light}}
+@media not (prefers-color-scheme:light){:root:has(#theme:checked){--page:#ddd5bf;--panel:#f6f1e3;--legend:#22201b;--dim:#6b655a;--frame:rgba(40,30,20,.24);--cream:#4a3420;
+  --yellow:#9a5c00;--amber:#b0651c;--red:#b23a1c;--green:#2f7d47;--blue:#2c64a0;
+  --box:#ede6d3;--edge:#c9bfa5;--key:#fffdf6;--tint:rgba(154,92,0,.07);--perf:rgba(154,92,0,.45);
+  --switch:"\263E  Dark pages";color-scheme:light}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--legend);font:500 16px/1.6 'Barlow Semi Condensed',system-ui,sans-serif;letter-spacing:.01em}
+main{max-width:920px;margin:0 auto;padding:24px 20px 48px;background:var(--panel);border-left:10px solid var(--edge);border-right:10px solid var(--edge);min-height:100vh}
+a{color:var(--yellow)}
+h1,h2,h3{font-weight:700;letter-spacing:.06em;line-height:1.2}
+h2{font-size:24px;text-transform:uppercase;letter-spacing:.14em;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--frame)}
+h3{font-size:18px;margin:26px 0 8px;color:var(--cream)}
+code{font:600 15px 'Flap',monospace;color:var(--yellow);letter-spacing:.04em}
+kbd{font:600 13px 'Barlow Semi Condensed',sans-serif;border:1px solid var(--dim);border-bottom-width:2px;border-radius:3px;padding:0 5px;background:var(--key);color:var(--legend)}
+
+/* The flap cards, as on the board */
+.fl{display:inline-block;position:relative;width:.82em;height:1.24em;margin:0 .035em;border-radius:.09em;
+  background:linear-gradient(180deg,var(--card-top) 0 49%,var(--split) 49% 51.5%,var(--card-bottom) 51.5%);
+  color:var(--flap);font:600 1em/1.24em 'Flap',sans-serif;text-align:center;vertical-align:middle;box-shadow:0 1px 0 rgba(0,0,0,.6)}
+.fl::before,.fl::after{content:"";position:absolute;top:calc(50% - .08em);width:.05em;height:.16em;background:#4a4a47;border-radius:1px}
+.fl::before{left:0}.fl::after{right:0}
+.fl.blank{color:transparent}
+.colon{display:inline-block;width:.32em;height:1.24em;vertical-align:middle;position:relative}
+.colon::before,.colon::after{content:"";position:absolute;left:.09em;width:.14em;height:.14em;background:var(--flap)}
+.colon::before{top:.36em}.colon::after{top:.78em}
+.gap{display:inline-block;width:.42em}
+.board{background:#0a0a0a;border:1px solid #2b2a27;border-radius:6px;padding:16px 18px;margin:16px 0;overflow-x:auto;box-shadow:inset 0 0 18px #000}
+.board .row{white-space:nowrap;margin:.18em 0}
+.cover-board{display:table;margin:24px auto 6px;font-size:52px;padding:14px 18px}
+.cover-board .row{text-align:center}
+.demo{font-size:15px}
+.demo .row.big{font-size:44px;text-align:center}
+.demo .row.date{text-align:center;font-size:20px}
+.demo .row:not(.big):not(.zone){text-align:center}
+.alarm-note{text-align:center;font:600 11px 'Flap',sans-serif;letter-spacing:.1em;color:#827f75;margin:4px 0 2px}
+.demo .places{display:table;margin:0 auto}
+.demo .row.date .fl{color:#e8862a}
+.demo .rule{border-top:1px solid #2b2a27;margin:12px 0 4px}
+.demo{--u:15px}
+.demo .cols{display:flex;margin:2px 0 0}
+.demo .cols span{font:600 11px 'Flap',sans-serif;letter-spacing:.1em;color:#827f75}
+.demo .cols span:nth-child(1){width:calc(var(--u) * 11.52)}
+.demo .cols span:nth-child(2){width:calc(var(--u) * 4.72)}
+.demo .region{font:600 14px 'Flap',sans-serif;letter-spacing:.08em;color:#c8c6bc;margin:10px 0 2px}
+.demo figcaption{font-size:14px;color:#a29d92;margin-top:8px}
+.end-board{display:table;margin:16px auto;font-size:34px}
+
+/* Cover */
+.cover{text-align:center;padding:30px 10px 10px}
+.maker{display:inline-block;border:1px solid var(--frame);border-radius:3px;padding:3px 10px;font-size:13px;color:var(--dim)}
+.maker b{color:var(--legend)}
+.cover h1{font-size:40px;margin:10px 0 8px;letter-spacing:.04em}
+.cover sup{font-size:20px;color:var(--yellow)}
+.tag{font-size:20px;color:var(--cream);margin:10px auto;max-width:640px}
+.ver{font:600 17px 'Flap',sans-serif;color:var(--yellow);letter-spacing:.08em}
+.fine{font-size:13px;color:var(--dim);max-width:600px;margin:14px auto}
+.stripe{height:7px;background:linear-gradient(90deg,var(--brown) 0 25%,var(--orange) 25% 50%,var(--amber) 50% 75%,var(--flap) 75%);margin:22px 0}
+
+/* Contents: a departures board */
+.board-note{color:var(--dim);margin-top:-6px}
+.fids{width:100%;border-collapse:separate;border-spacing:0 4px;background:#0a0a0a;border:1px solid #2b2a27;border-radius:6px;padding:8px 12px;box-shadow:inset 0 0 18px #000}
+.fids th{font:600 12px 'Flap',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#827f75;text-align:left;padding:2px 8px}
+.fids td{padding:3px 8px;vertical-align:middle;border-top:1px solid #1d1c1a}
+.fids td:nth-child(2){font:600 17px 'Flap',sans-serif;letter-spacing:.05em;text-transform:uppercase}
+.fids td:nth-child(2) a{color:var(--flap);text-decoration:none}
+.fids td:nth-child(2) a:hover{text-decoration:underline}
+.fids td:nth-child(2) span{color:#a29d92;font-size:14px;text-transform:none;letter-spacing:.02em;font-family:'Barlow Semi Condensed',sans-serif}
+.gate{display:inline-block;font:600 15px/1.6 'Flap',sans-serif;color:var(--flap);min-width:2.2em;text-align:center;border-radius:2px;
+  background:linear-gradient(180deg,var(--card-top) 0 49%,var(--split) 49% 52%,var(--card-bottom) 52%)}
+.rm{font:600 14px 'Flap',sans-serif;letter-spacing:.1em;color:#ece8dd;white-space:nowrap}
+.rm.late{color:var(--red)}
+
+/* Boarding pass cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{border:1px solid var(--frame);border-radius:6px;padding:10px 14px;background:var(--box)}
+.pass{border-left:6px dashed var(--perf);background:linear-gradient(90deg,var(--tint),transparent 40%) var(--box)}
+.card h3{margin:4px 0 8px;font:600 15px 'Flap',sans-serif;text-transform:uppercase;letter-spacing:.14em;color:var(--yellow)}
+.card table{border-collapse:collapse;width:100%;font-size:15px}
+.card td{padding:4px 6px 4px 0;vertical-align:top;border-top:1px solid rgba(236,232,221,.08)}
+.card td:first-child{width:44%;color:var(--cream);padding-right:12px}
+
+/* Announcements */
+.ic{border-left:4px solid var(--frame);background:var(--box);padding:10px 14px;border-radius:0 4px 4px 0;margin:16px 0}
+.ic b:first-child{display:inline-block;font:600 11px 'Flap',sans-serif;letter-spacing:.18em;padding:1px 8px;border-radius:2px;margin-right:8px;color:#111;vertical-align:1px}
+.ic.tip{border-color:var(--green)}.ic.tip b:first-child{background:var(--green);color:#fff}
+.ic.remember{border-color:var(--flap)}.ic.remember b:first-child{background:var(--flap)}
+.ic.warning{border-color:var(--red)}.ic.warning b:first-child{background:var(--red);color:#fff}
+.ic.tech{border-color:var(--blue)}.ic.tech b:first-child{background:var(--blue);color:#fff}
+.iconlist .ic{margin:8px 0}
+
+/* Gate numbers on the Parts */
+.pn{display:inline-block;font:600 14px/1.7 'Flap',sans-serif;color:var(--flap);padding:0 9px;border-radius:2px;margin-right:10px;vertical-align:3px;letter-spacing:.1em;
+  background:linear-gradient(180deg,var(--card-top) 0 49%,var(--split) 49% 52%,var(--card-bottom) 52%)}
+.lcdx{display:inline-block;font:600 14px/1.5 'Flap',sans-serif;color:var(--flap);padding:0 7px;border-radius:2px;letter-spacing:.08em;
+  background:linear-gradient(180deg,var(--card-top) 0 49%,var(--split) 49% 52%,var(--card-bottom) 52%)}
+
+dl dt{font-weight:700;color:var(--cream);margin-top:10px}
+dl dd{margin:2px 0 0 18px}
+.trouble dt{color:var(--yellow)}
+.t{border-collapse:collapse;width:100%;margin:10px 0;font-size:15px}
+.t th,.t td{border-top:1px solid rgba(236,232,221,.12);padding:7px 8px;text-align:left;vertical-align:top}
+.t th{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.t td:first-child{white-space:nowrap}
+.steps li,.tens li{margin:6px 0}
+.recipe{border:1px solid var(--frame);border-left:6px dashed var(--perf);border-radius:6px;padding:2px 16px 8px;margin:14px 0;background:var(--box)}
+.recipe h3{color:var(--yellow);font:600 17px 'Flap',sans-serif;text-transform:uppercase;letter-spacing:.1em}
+.thanks{border:1px solid var(--perf);border-radius:6px;padding:4px 18px 10px;margin-top:40px;background:var(--box)}
+.thanks h2{margin-top:16px;border:0;color:var(--yellow)}
+.end{text-align:center;color:var(--dim);margin-top:40px}
+.end p:last-child{color:var(--cream);font-size:18px}
+
+@media (max-width:640px){.cover-board{font-size:30px}.cover h1{font-size:30px}main{border:0}.demo{font-size:11px;--u:11px}.demo .row.big{font-size:32px}.fids td:nth-child(3){display:none}.fids th:nth-child(3){display:none}}
+@media print{
+  :root{--page:#fff;--panel:#fff;--legend:#111;--dim:#555;--frame:rgba(0,0,0,.25);--cream:#111;color-scheme:light}
+  main{border:0;max-width:none;padding:0}
+  .card,.ic,.recipe,.thanks{background:#fff}
+  kbd{background:#fff;color:#111}
+  a{color:#111}
+  code{color:#7a4a24}
+  .board,.fids,.fl,.gate,.pn,.lcdx,.stripe,.colon{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h2{break-after:avoid}.ic,.recipe,.card,dl dd,.board,.thanks{break-inside:avoid}
+  #p1,#p3,#p6,#p9,#p11,#p13,#p15{break-before:page}
+}
+
+/* The switch */
+#theme{position:absolute;opacity:0;pointer-events:none}
+.theme-switch{position:fixed;top:10px;right:12px;z-index:5;cursor:pointer;font:600 13px 'Barlow Semi Condensed',sans-serif;letter-spacing:.06em;
+  color:var(--legend);background:var(--box);border:1px solid var(--frame);border-radius:14px;padding:3px 12px;user-select:none}
+.theme-switch::after{content:var(--switch)}
+#theme:focus-visible+.theme-switch{outline:2px solid var(--yellow);outline-offset:2px}
+@media print{.theme-switch{display:none}}
+
+/* Pages, for printing and the PDFs */
+h2{break-after:avoid}
+.ic,.recipe,.card,dl dd,.board,.thanks,.fids tr,.t tr{break-inside:avoid}
+html.paged .toc,html.paged #cheat,html.paged #p1,html.paged #gloss{break-before:page}
+html.paged .toc h2{margin-top:0}
+html.paged .theme-switch{display:none}
+html.paged,html.paged body{background:var(--panel)}
+html.paged main{max-width:none;border:0;padding:13mm 14mm;min-height:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+@page{size:A4;margin:0}

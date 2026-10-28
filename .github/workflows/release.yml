@@ -80,7 +80,10 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Add the user guide
-        run: cp "Split-Flap Clock User Guide.html" dist/splitflap-clock-user-guide.html
+        run: |
+          cp "Split-Flap Clock User Guide.html" dist/splitflap-clock-user-guide.html
+          cp "Split-Flap Clock User Guide (dark).pdf" dist/splitflap-clock-user-guide-dark.pdf
+          cp "Split-Flap Clock User Guide (light).pdf" dist/splitflap-clock-user-guide-light.pdf
       - name: Release notes from CHANGELOG.md
         run: |
           ver="${{ needs.version.outputs.version }}"
@@ -92,6 +95,7 @@ jobs:
           - **Windows**: `splitflap-clock.exe`. Download it and run it; nothing to install.
           - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
           - **User guide**: `splitflap-clock-user-guide.html`. Open it in any web browser.
+          - **User guide as PDFs**: `splitflap-clock-user-guide-dark.pdf` and `splitflap-clock-user-guide-light.pdf`.
           NOTES
           cat notes.md
       - name: Create the release

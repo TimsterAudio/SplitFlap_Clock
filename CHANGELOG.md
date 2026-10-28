@@ -2,8 +2,13 @@
 
 ## Unreleased
 
-- Settings opens next to the clock, to its right or, if there's no room, its left, instead of wherever the system puts new windows (on a widescreen, often the far side).
+## 1.0.0 – 2026-10-28
+
+Version 1: the clock, complete.
+
 - **Alarms**, in Settings: as many as you like, each with a time, a label for the board, the days it repeats (or once), and whose time it follows: yours, or any place on the board. When one goes off, the board clatters, a row flips in under the time saying NOW and ALARM by turns, and an airport chime plays every few seconds, at its own volume, whether the clatter is on or not. Click the board to snooze for 9 minutes (the row says DELAYED and when it will ring again); right-click or press Esc to stop it. **Test** rings an alarm straight away. If the clock wasn't running or the computer was asleep when an alarm was due, it still rings if that was less than 10 minutes ago, and an alarm nobody answers stops by itself after 30 minutes.
+- Settings opens next to the clock, to its right or, if there's no room, its left, instead of wherever the system puts new windows (on a widescreen, often the far side).
+- The user guide covers alarms, has light pages as well as dark (it follows your system's setting, with a switch to flip it), and comes as two PDFs too, one dark and one light. Each release carries all three.
 
 ## 0.5.0 – 2026-10-28
 

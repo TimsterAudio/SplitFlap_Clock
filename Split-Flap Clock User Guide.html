@@ -52,9 +52,11 @@ kbd{font:600 13px 'Barlow Semi Condensed',sans-serif;border:1px solid var(--dim)
 .cover-board .row{text-align:center}
 .demo{font-size:15px}
 .demo .row.big{font-size:44px;text-align:center}
-.demo .row:nth-child(2){text-align:center;font-size:20px}
+.demo .row.date{text-align:center;font-size:20px}
+.demo .row:not(.big):not(.zone){text-align:center}
+.alarm-note{text-align:center;font:600 11px 'Flap',sans-serif;letter-spacing:.1em;color:#827f75;margin:4px 0 2px}
 .demo .places{display:table;margin:0 auto}
-.demo .row:nth-child(2) .fl{color:#e8862a}
+.demo .row.date .fl{color:#e8862a}
 .demo .rule{border-top:1px solid #2b2a27;margin:12px 0 4px}
 .demo{--u:15px}
 .demo .cols{display:flex;margin:2px 0 0}
@@ -139,7 +141,7 @@ dl dd{margin:2px 0 0 18px}
   code{color:#7a4a24}
   .board,.fids,.fl,.gate,.pn,.lcdx,.stripe,.colon{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   h2{break-after:avoid}.ic,.recipe,.card,dl dd,.board,.thanks{break-inside:avoid}
-  #p1,#p3,#p6,#p9,#p12,#p14{break-before:page}
+  #p1,#p3,#p6,#p9,#p11,#p13,#p15{break-before:page}
 }
 
 /* The switch */
@@ -149,6 +151,16 @@ dl dd{margin:2px 0 0 18px}
 .theme-switch::after{content:var(--switch)}
 #theme:focus-visible+.theme-switch{outline:2px solid var(--yellow);outline-offset:2px}
 @media print{.theme-switch{display:none}}
+
+/* Pages, for printing and the PDFs */
+h2{break-after:avoid}
+.ic,.recipe,.card,dl dd,.board,.thanks,.fids tr,.t tr{break-inside:avoid}
+html.paged .toc,html.paged #cheat,html.paged #p1,html.paged #gloss{break-before:page}
+html.paged .toc h2{margin-top:0}
+html.paged .theme-switch{display:none}
+html.paged,html.paged body{background:var(--panel)}
+html.paged main{max-width:none;border:0;padding:13mm 14mm;min-height:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+@page{size:A4;margin:0}
 
 </style>
 </head>
@@ -165,7 +177,7 @@ dl dd{margin:2px 0 0 18px}
   </div>
   <h1>for Dummies<sup>*</sup></h1>
   <p class="tag">The unofficial, slightly cheeky passenger's guide to the desk clock that clacks like a 1970s airport.</p>
-  <p class="ver">For Split-Flap Clock <b>v0.5.0</b></p>
+  <p class="ver">For Split-Flap Clock <b>v1.0.0</b></p>
   <p class="fine">* Dummies not included. Clatter extremely included. Not affiliated with any famous yellow book series, any airline, any airport, or the Italian company whose departure boards taught a generation of travellers to look up and listen. We just really like them.</p>
   <div class="stripe"></div>
 </header>
@@ -187,10 +199,11 @@ dl dd{margin:2px 0 0 18px}
     <tr><td><span class="gate">08</span></td><td><a href="#p8">Colours, or the paint shop</a></td><td class="rm">GATE OPEN</td></tr>
     <tr><td><span class="gate">09</span></td><td><a href="#p9">Refreshes, or the great clatter</a></td><td class="rm">FINAL CALL</td></tr>
     <tr><td><span class="gate">10</span></td><td><a href="#p10">Sound, or why the office has gone quiet</a></td><td class="rm">FINAL CALL</td></tr>
-    <tr><td><span class="gate">11</span></td><td><a href="#p11">Login, desktops and other ground handling</a></td><td class="rm">FINAL CALL</td></tr>
-    <tr><td><span class="gate">12</span></td><td><a href="#p12">Itineraries (recipes)</a></td><td class="rm">GATE CLOSED</td></tr>
-    <tr><td><span class="gate">13</span></td><td><a href="#p13">When things go wrong</a></td><td class="rm late">DELAYED</td></tr>
-    <tr><td><span class="gate">14</span></td><td><a href="#p14">The Part of Tens</a></td><td class="rm">DEPARTED</td></tr>
+    <tr><td><span class="gate">11</span></td><td><a href="#p11">Alarms, or your wake-up call</a></td><td class="rm">FINAL CALL</td></tr>
+    <tr><td><span class="gate">12</span></td><td><a href="#p12">Login, desktops and other ground handling</a></td><td class="rm">FINAL CALL</td></tr>
+    <tr><td><span class="gate">13</span></td><td><a href="#p13">Itineraries (recipes)</a></td><td class="rm">GATE CLOSED</td></tr>
+    <tr><td><span class="gate">14</span></td><td><a href="#p14">When things go wrong</a></td><td class="rm late">DELAYED</td></tr>
+    <tr><td><span class="gate">15</span></td><td><a href="#p15">The Part of Tens</a></td><td class="rm">DEPARTED</td></tr>
     <tr><td><span class="gate">GL</span></td><td><a href="#gloss">Phrasebook for the jet-lagged</a> <span>(glossary)</span></td><td class="rm">DEPARTED</td></tr>
   </table>
 </nav>
@@ -206,6 +219,7 @@ dl dd{margin:2px 0 0 18px}
         <tr><td>Double-click</td><td>Opens Settings</td></tr>
         <tr><td><b>⚙</b> top right</td><td>Also opens Settings (it appears when the pointer is over the clock)</td></tr>
         <tr><td>Resize the window</td><td>The board scales to fit and keeps its shape</td></tr>
+        <tr><td>Alarm ringing</td><td>Click to snooze for 9 minutes; <kbd>Esc</kbd> or right-click to stop</td></tr>
       </table>
     </div>
     <div class="card pass"><h3>Where things live</h3>
@@ -215,6 +229,7 @@ dl dd{margin:2px 0 0 18px}
         <tr><td>More places</td><td>Settings, <b>Add a place</b></td></tr>
         <tr><td>Groups</td><td>A place's <b>Region</b></td></tr>
         <tr><td>The clatter</td><td>Settings, <b>Refresh</b> and <b>Sound</b></td></tr>
+        <tr><td>Wake-up calls</td><td>Settings, <b>Alarms</b></td></tr>
       </table>
     </div>
     <div class="card pass"><h3>Panic buttons</h3>
@@ -223,6 +238,7 @@ dl dd{margin:2px 0 0 18px}
         <tr><td>Can't find the window edges</td><td>Right-click, untick <b>Hide title bar</b></td></tr>
         <tr><td>Clock too big or small</td><td>Settings, <b>Size</b></td></tr>
         <tr><td>Want the show right now</td><td>Right-click, <b>Refresh the board</b></td></tr>
+        <tr><td>Alarm won't stop</td><td><kbd>Esc</kbd>, or right-click, <b>Stop alarm</b></td></tr>
       </table>
     </div>
   </div>
@@ -258,7 +274,7 @@ dl dd{margin:2px 0 0 18px}
     <li><b>Look up.</b> Feel faintly nostalgic for a decade you may not have lived through. That's normal.</li>
   </ol>
   <p class="ic warning"><b>SECURITY ANNOUNCEMENT</b> Windows may say it "protected your PC" from an unrecognised app the first time. The clock isn't signed by a big company, so SmartScreen hasn't heard of it. Click <b>More info</b>, then <b>Run anyway</b>. It only asks once.</p>
-  <p class="ic tip"><b>PASSENGER INFORMATION</b> The clock is a single file. Put it somewhere you'll keep it, such as a Programs or Apps folder, rather than leaving it in Downloads, especially if you're going to have it start when you log in (Gate 11).</p>
+  <p class="ic tip"><b>PASSENGER INFORMATION</b> The clock is a single file. Put it somewhere you'll keep it, such as a Programs or Apps folder, rather than leaving it in Downloads, especially if you're going to have it start when you log in (Gate 12).</p>
 </section>
 
 <section id="p3">
@@ -266,7 +282,7 @@ dl dd{margin:2px 0 0 18px}
   <p>Here's a board with everything switched on. Yours starts simpler: the time and the date, in yellow.</p>
   <figure class="board demo">
     <div class="row big"><span class="fl">1</span><span class="fl">4</span><span class="colon"></span><span class="fl">3</span><span class="fl">5</span></div>
-    <div class="row"><span class="fl">T</span><span class="fl">U</span><span class="fl">E</span><span class="gap"></span><span class="fl">2</span><span class="fl">8</span><span class="gap"></span><span class="fl">O</span><span class="fl">C</span><span class="fl">T</span><span class="gap"></span><span class="fl">2</span><span class="fl">0</span><span class="fl">2</span><span class="fl">6</span></div>
+    <div class="row date"><span class="fl">T</span><span class="fl">U</span><span class="fl">E</span><span class="gap"></span><span class="fl">2</span><span class="fl">8</span><span class="gap"></span><span class="fl">O</span><span class="fl">C</span><span class="fl">T</span><span class="gap"></span><span class="fl">2</span><span class="fl">0</span><span class="fl">2</span><span class="fl">6</span></div>
     <div class="places">
     <div class="rule"></div>
     <div class="cols"><span>CITY</span><span>TIME</span><span>DAY</span></div>
@@ -299,7 +315,7 @@ dl dd{margin:2px 0 0 18px}
     <dt>Moving it</dt><dd>Press and drag anywhere on the face. That works with or without a title bar.</dd>
     <dt>Sizing it</dt><dd>Drag the window's edge, and the board scales to fit while keeping its shape. Or use <b>Size</b> in Settings, which goes from 0.30 to 4.00 times the normal size. When you add places, the window grows to fit them, but never taller than your screen: past that, the whole board shrinks instead.</dd>
     <dt>The menu</dt><dd>Right-click the face for <b>Settings…</b>, <b>Keep on top</b>, <b>Hide title bar</b>, <b>Show on all desktops</b>, <b>Sound</b>, <b>Refresh the board</b> and <b>Quit</b>.</dd>
-    <dt>Settings</dt><dd>Double-click the face, choose it from the menu, or click the small <b>⚙</b> that appears in the top right corner when the pointer is over the clock. Settings opens in its own window. Changes take effect straight away; there's no OK button to forget.</dd>
+    <dt>Settings</dt><dd>Double-click the face, choose it from the menu, or click the small <b>⚙</b> that appears in the top right corner when the pointer is over the clock. Settings opens in its own window, right beside the clock: to its right, or to its left if the clock is near the edge of the screen. Changes take effect straight away; there's no OK button to forget.</dd>
   </dl>
   <p class="ic tip"><b>PASSENGER INFORMATION</b> <b>Hide title bar</b> turns the clock into a bare black slab that sits on your desktop like the real thing. You can still drag it about by its face. To make it bigger or smaller without the window edges, use <b>Size</b>.</p>
   <p class="ic remember"><b>PLEASE NOTE</b> Settings are saved when the clock closes, and loaded next time it starts. They live in <code>%APPDATA%\splitflap-clock</code> on Windows and <code>~/.local/share/splitflap-clock</code> on Linux. Updating to a new version keeps them.</p>
@@ -307,7 +323,7 @@ dl dd{margin:2px 0 0 18px}
 
 <section id="p5">
   <h2><span class="pn">Gate 05</span> The Display settings, switch by switch</h2>
-  <p>The top of the Settings window, row by row.</p>
+  <p>The top of the Settings window, row by row. Below it come <b>Alarms</b> (Gate 11), <b>Add a place</b> and <b>Other places</b> (Gate 06), and <b>Regions</b> (Gate 07).</p>
   <table class="t">
     <tr><th>Row</th><th>What it does</th></tr>
     <tr><td><b>Digits</b></td><td><b>Yellow</b>, the classic airport amber-yellow, or <b>White</b>, the railway-station look. Everything without its own colour uses this.</td></tr>
@@ -316,8 +332,8 @@ dl dd{margin:2px 0 0 18px}
     <tr><td><b>Show</b></td><td><b>Seconds</b> adds two more big cards to the main time. <b>Date</b> shows or hides the date line.</td></tr>
     <tr><td><b>Refresh</b></td><td>How often the whole board does its clatter: <b>Never</b>, <b>Every 15 minutes</b>, <b>Every 30 minutes</b>, <b>Every hour</b> or <b>At random</b>. See Gate 09.</td></tr>
     <tr><td><b>Sound</b></td><td>The clatter you hear, its <b>Volume</b>, and whether the time ticking over makes a sound too. See Gate 10.</td></tr>
-    <tr><td><b>Window</b></td><td><b>Keep on top</b> of other windows, <b>Hide title bar</b>, and <b>Show on all desktops</b>. See Gate 11.</td></tr>
-    <tr><td><b>Start</b></td><td><b>Start when I log in</b>. See Gate 11.</td></tr>
+    <tr><td><b>Window</b></td><td><b>Keep on top</b> of other windows, <b>Hide title bar</b>, and <b>Show on all desktops</b>. See Gate 12.</td></tr>
+    <tr><td><b>Start</b></td><td><b>Start when I log in</b>. See Gate 12.</td></tr>
     <tr><td><b>Size</b></td><td>How big the board is, from 0.30 to 4.00 times the normal size.</td></tr>
   </table>
   <p class="ic tip"><b>PASSENGER INFORMATION</b> Seconds look wonderful but turn the clock into a busy little machine, flipping every second. For a calm desk, leave them off and let the minutes do the work.</p>
@@ -405,7 +421,38 @@ dl dd{margin:2px 0 0 18px}
 </section>
 
 <section id="p11">
-  <h2><span class="pn">Gate 11</span> Login, desktops and other ground handling</h2>
+  <h2><span class="pn">Gate 11</span> Alarms, or your wake-up call</h2>
+  <p>An airport never lets a flight leave without telling you. Neither does Split-Flap Clock. Set an alarm and, when it's time, the board announces it: a clatter, a row of its own flipping in under the time, and a proper airport chime, <i>bing-bong</i>, every few seconds until you answer it.</p>
+  <figure class="board demo">
+    <div class="row big"><span class="fl">0</span><span class="fl">7</span><span class="colon"></span><span class="fl">3</span><span class="fl">0</span></div>
+    <div class="row"><span class="fl">W</span><span class="fl">A</span><span class="fl">K</span><span class="fl">E</span><span class="gap"></span><span class="fl">U</span><span class="fl">P</span><span class="gap"></span><span class="gap"></span><span class="fl">0</span><span class="fl">7</span><span class="colon"></span><span class="fl">3</span><span class="fl">0</span><span class="gap"></span><span class="gap"></span><span class="fl">N</span><span class="fl">O</span><span class="fl">W</span></div>
+    <div class="alarm-note">CLICK TO SNOOZE 9 MIN - RIGHT-CLICK OR ESC TO STOP</div>
+    <figcaption>An alarm going off. The last word changes between NOW and ALARM, as a board pages a passenger.</figcaption>
+  </figure>
+  <h3>Setting one</h3>
+  <p>In Settings, under <b>Alarms</b>, press <b>Add an alarm</b>. Each alarm has a little panel:</p>
+  <dl>
+    <dt>The tick, the time and the label</dt><dd>The tick turns it on or off. The two boxes are the hour and the minute, which you can type into or drag. The label is what the board says when it rings, up to 12 characters: <b>WAKE UP</b>, <b>TEA</b>, <b>CALL MUM</b>.</dd>
+    <dt>Repeat</dt><dd>Click the days it rings on: <b>M T W T F S S</b>. Beside them it says what you've picked, such as <b>Weekdays</b>, <b>Weekends</b> or <b>Every day</b>. With no days picked it says <b>Once</b>: the alarm rings the next time its time comes round, then turns itself off.</dd>
+    <dt>Time at</dt><dd><b>Your time</b>, or any place on the board. An alarm at 09:00 at TOKYO rings when it's nine in the morning in Tokyo, summer time and all. It keeps following that place if you move it up or down the list. If you remove the place, the alarm goes back to your time.</dd>
+    <dt>Test</dt><dd>Rings it straight away, so you can hear what you're in for.</dd>
+    <dt>Remove</dt><dd>Gets rid of it.</dd>
+  </dl>
+  <p>Under the alarms, <b>Chime volume</b> sets how loud the chime is. The chime has its own volume, and it rings even if the clatter sound is off, because an alarm you can't hear isn't much use.</p>
+  <h3>When it goes off</h3>
+  <ul>
+    <li>The board does a refresh, with its clatter if <b>Sound</b> is on, and a row flips in under the time with the alarm's label, its time and <b>NOW</b> and <b>ALARM</b> by turns.</li>
+    <li>The chime plays every four seconds.</li>
+    <li><b>Click the board to snooze.</b> It goes quiet for nine minutes, and the row says <b>DELAYED</b> with the time it will ring again. Then it all starts again.</li>
+    <li><b>To stop it,</b> press <kbd>Esc</kbd>, or right-click and choose <b>Stop alarm</b>. The right-click menu has <b>Snooze 9 minutes</b> too.</li>
+  </ul>
+  <p class="ic remember"><b>PLEASE NOTE</b> The clock has to be running for its alarms to ring. It can't wake a computer that's asleep or switched off. If the clock wasn't running, or the computer was asleep, when an alarm was due, it still rings when it gets the chance, as long as that's within 10 minutes. And an alarm that nobody answers gives up by itself after half an hour, so you won't come back from holiday to a clock that's been chiming for a fortnight.</p>
+  <p class="ic tip"><b>PASSENGER INFORMATION</b> Changed an alarm's time after it already rang today? It can ring again today, at its new time.</p>
+  <p class="ic tech"><b>CREW ONLY</b> Why nine minutes? Because that's what every snooze button has done since the 1950s, and who are we to argue. The chime is two bell notes, E then C, made from a few pure tones as it plays, like the clatter. If two alarms go off together, the board shows the first, and a snooze or a stop answers both.</p>
+</section>
+
+<section id="p12">
+  <h2><span class="pn">Gate 12</span> Login, desktops and other ground handling</h2>
   <h3>Start when I log in</h3>
   <p>Tick it in Settings and the clock starts with you every time you log in. On Windows it appears under Startup apps in Task Manager, where you can also switch it off. On Linux it adds an entry to <code>~/.config/autostart</code>. If you move the clock's file to another folder, the entry is updated the next time you run it from there.</p>
   <h3>Show on all desktops</h3>
@@ -419,8 +466,8 @@ dl dd{margin:2px 0 0 18px}
   <p class="ic tech"><b>CREW ONLY</b> On Linux the clock runs as an X11 window wherever it can, through XWayland on Wayland desktops. Wayland doesn't let apps keep themselves on top or on every workspace, but X11 windows can. The only side effect is that with fractional display scaling, such as 125%, the clock can look a touch soft.</p>
 </section>
 
-<section id="p12">
-  <h2><span class="pn">Gate 12</span> Itineraries (recipes)</h2>
+<section id="p13">
+  <h2><span class="pn">Gate 13</span> Itineraries (recipes)</h2>
   <div class="recipe"><h3>Terminal 1, 1975</h3>
     <p>Digits <b>Yellow</b>, <b>24-hour</b>, Date on, Refresh <b>Every hour</b>, Sound on at a modest volume. Add three far-off places and give them all the region <code>Departures</code>. Make a cup of tea at five to the hour and come back for the show.</p></div>
   <div class="recipe"><h3>The railway concourse</h3>
@@ -431,12 +478,16 @@ dl dd{margin:2px 0 0 18px}
     <p>Add each family member's city and rename it to the person: <b>MUM</b>, <b>JAMES</b>, <b>GRANDAD</b>. Give them the region <code>Family</code> and a colour each. You'll never ring anyone at 3 a.m. again. Probably.</p></div>
   <div class="recipe"><h3>The surprise</h3>
     <p>Refresh <b>At random</b>, <b>Between</b> 5 <b>and</b> 25 <b>minutes apart</b>, Sound on. Show on all desktops. Every so often the clock clatters into life all by itself, and everybody looks up, just like they used to.</p></div>
+  <div class="recipe"><h3>The early flight</h3>
+    <p>An alarm at 06:45 on <b>Weekdays</b>, labelled <code>WAKE UP</code>, with the chime volume up. Another at 08:30, labelled <code>LEAVE NOW</code>. The board pages you like a passenger who's been in the duty-free too long.</p></div>
+  <div class="recipe"><h3>The call to Tokyo</h3>
+    <p>Add <code>Asia/Tokyo</code> as a place, then an alarm at 09:00, <b>Time at</b> TOKYO, labelled <code>CALL TOKYO</code>, on Monday to Friday. It rings when Tokyo's day starts, whatever your clocks are doing for summer time.</p></div>
   <div class="recipe"><h3>The quiet library</h3>
     <p>Refresh <b>Never</b>, Sound off, Seconds off, <b>12-hour</b>. The cards still flip, silently, once a minute. Very civilised.</p></div>
 </section>
 
-<section id="p13">
-  <h2><span class="pn">Gate 13</span> When things go wrong</h2>
+<section id="p14">
+  <h2><span class="pn">Gate 14</span> When things go wrong</h2>
   <dl class="trouble">
     <dt>Windows won't open it ("Windows protected your PC")</dt>
     <dd>Click <b>More info</b>, then <b>Run anyway</b>. The clock isn't signed, so SmartScreen doesn't recognise it.</dd>
@@ -454,6 +505,10 @@ dl dd{margin:2px 0 0 18px}
     <dd>On Windows, <b>Show on all desktops</b> removes its taskbar button. It's still there: look on the desktop and right-click it.</dd>
     <dt>"Show on all desktops" says Wayland doesn't let apps choose this</dt>
     <dd>The clock is running as a native Wayland window, which happens when your session has no X11 (XWayland) at all. Use your desktop's own window menu, often a right-click on the title bar, to put it on all workspaces.</dd>
+    <dt>An alarm didn't ring</dt>
+    <dd>Is it ticked on, with the right days? A <b>Once</b> alarm turns itself off after it has rung. Was the clock running? It can't ring while the computer is asleep or the clock is closed, and it only makes up for a missed alarm within 10 minutes. Is <b>Time at</b> set to the place you meant?</dd>
+    <dt>The alarm's row is small</dt>
+    <dd>The row fits within the board's width, so the window doesn't jump about when it appears. On a board with only the time on it, that means small cards. Add a place or the date, and it gets bigger.</dd>
     <dt>A place has disappeared</dt>
     <dd>Check its colour: dark grey on dark cards is very discreet. Or it may be further down than you think, under its region's heading.</dd>
     <dt>My settings didn't stick</dt>
@@ -461,8 +516,8 @@ dl dd{margin:2px 0 0 18px}
   </dl>
 </section>
 
-<section id="p14">
-  <h2><span class="pn">Gate 14</span> The Part of Tens</h2>
+<section id="p15">
+  <h2><span class="pn">Gate 15</span> The Part of Tens</h2>
   <h3>Ten things that are not delays (honest)</h3>
   <ol class="tens">
     <li>Names take longer to settle than digits. Their drums have 47 flaps; the digits' have ten at most.</li>
@@ -472,7 +527,7 @@ dl dd{margin:2px 0 0 18px}
     <li>An <code>é</code> arrives in a single flip. It isn't on the drum, so it has nothing to come round from.</li>
     <li>A place set by hand doesn't change for summer time. It's a fixed offset by design.</li>
     <li>The start-up is never quite the same twice. The cards set off a moment apart, at their own speeds, on purpose.</li>
-    <li>The clock makes no sound on the minute unless you ask it to. It's a desk clock, not a metronome.</li>
+    <li>The clock makes no sound on the minute unless you ask it to. It's a desk clock, not a metronome. The snooze is nine minutes, because every snooze is nine minutes.</li>
     <li>On Windows, no taskbar button with <b>Show on all desktops</b>. That's how Windows does it.</li>
     <li>The board gets smaller as you add places. The window stops growing at the screen's edge, so the board scales down to fit.</li>
   </ol>
@@ -481,7 +536,7 @@ dl dd{margin:2px 0 0 18px}
     <li>Refresh <b>At random</b>, between 1 and 2 minutes apart, with the sound up.</li>
     <li>Rename everyone's home city to <b>DELAYED</b>.</li>
     <li>Add a place called <b>LUNCH</b>, set by hand two hours ahead, and insist it's lunchtime there.</li>
-    <li>Seconds on, <b>Also when the time changes</b> on. Tick. Tick. Tick.</li>
+    <li>An alarm called <b>BOARDING</b> at 16:55 every weekday, chime volume all the way up.</li>
     <li>Give every place a slightly different shade of beige. Call it "1970s accuracy".</li>
     <li>Put the clock on all desktops, keep it on top, and make it four times the size.</li>
     <li>Make a region called <b>GATE CLOSED</b> and put your manager's city in it.</li>
@@ -498,6 +553,7 @@ dl dd{margin:2px 0 0 18px}
     <dt>Card, or module</dt><dd>One character's drum of flaps. The clock's main time has four of them, or six with seconds.</dd>
     <dt>Drum</dt><dd>The set of symbols a card carries, in order. Digits have 10, the minute's tens 6, names and dates 47.</dd>
     <dt>Flap</dt><dd>One hinged leaf, carrying the top half of one symbol and the bottom half of the next.</dd>
+    <dt>Snooze</dt><dd>Nine more minutes. Click the board while an alarm rings.</dd>
     <dt>Refresh</dt><dd>Every card spinning once round its drum and landing back where it was.</dd>
     <dt>Region</dt><dd>Your name for a group of places on the board, with a heading of its own.</dd>
     <dt>Time zone</dt><dd>An area that keeps the same clock, named after a big city in it, such as <code>Europe/Paris</code>. It knows its own summer time rules.</dd>
@@ -512,7 +568,7 @@ dl dd{margin:2px 0 0 18px}
 
 <section class="thanks">
   <h2>Acknowledgements</h2>
-  <p>Special thanks to <b>Oscar</b>, our most particular passenger. He asked for unlimited places, times set by hand, colours for everything, and regions to sort them into. Then he tested the lot and spotted that you could copy a colour but not paste one. Version 0.5.0 is very much his doing. Every board needs someone who reads it properly.</p>
+  <p>Special thanks to <b>Oscar</b>, our most particular passenger. He asked for unlimited places, times set by hand, colours for everything, and regions to sort them into. Then he tested the lot and spotted that you could copy a colour but not paste one. Much of version 1 is his doing. Every board needs someone who reads it properly.</p>
 </section>
 
 <footer class="end">

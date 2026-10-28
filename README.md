@@ -13,6 +13,7 @@ departures.
 - Colours of your own for the main time, the date and each place
 - The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
+- Alarms, announced by the board with an airport chime, by your time or any place's, with a 9-minute snooze
 - Can start when you log in
 - Optional sound: the clatter of the cards at start-up and on refreshes, with the clock itself kept quiet
 - One file: no installer, no runtime, nothing downloaded while it runs
@@ -25,8 +26,11 @@ Download it from [Releases](https://github.com/TimsterAudio/SplitFlap_Clock/rele
 
 **New to it?** Open **`Split-Flap Clock User Guide.html`** ("Split-Flap Clock
 for Dummies"): everything on the board and in Settings explained, with
-itineraries, troubleshooting and a fair amount of 1970s airport cheek. Each
-release has it as `splitflap-clock-user-guide.html` too.
+itineraries, troubleshooting and a fair amount of 1970s airport cheek, with
+dark or light pages. It comes as PDFs too, one dark and one light. Each
+release carries all three: `splitflap-clock-user-guide.html`,
+`splitflap-clock-user-guide-dark.pdf` and `splitflap-clock-user-guide-light.pdf`.
+The guide is built from `docs/guide`.
 
 - **Right-click** the clock for the menu, or **double-click** it (or use the
   ⚙ in the corner) to open Settings.
