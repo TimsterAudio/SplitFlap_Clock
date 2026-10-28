@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- When an alarm rings, **SNOOZE** and **STOP** flap cards appear under it, to press. They light up under the pointer. (A click anywhere else on the board still snoozes, and Esc still stops.)
+- An alarm's days stand out: the days it rings on are lit yellow. An alarm can be set **On a date** instead, to ring once on that day.
+- Alarms only ring for times that come round while the clock is running: starting the clock just after an alarm's time, or setting or changing an alarm for a time just gone, no longer rings it straight away. After the computer has been asleep, an alarm missed by less than 10 minutes still rings.
+- **Board**: black cards, or white cards with dark letters. **Menus**: the right-click menu and Settings like your system, light or dark.
+- The version and its release date are at the foot of Settings, with **Beer money**, for anyone who'd like to buy the developer a beer.
+
 - Alarms have a **Reason**, for what each is for: when one rings, the end of its row flips to the reason, such as DENTIST, and stays there.
 - Fixed: a ringing alarm's row no longer keeps flipping between NOW and ALARM. It flips to NOW (or its reason) once and stops; DELAYED while it snoozes.
 

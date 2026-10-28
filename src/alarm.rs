@@ -1,9 +1,12 @@
 //! Alarms: when they ring, and by whose clock.
 //!
-//! An alarm rings at its time on its days, by the time of its place: your
-//! own, or one of the places on the board. It rings once a day at most, and
-//! if the clock wasn't running or the computer was asleep when it was due,
-//! it still rings if that was less than [`GRACE`] minutes ago.
+//! An alarm rings at its time on its days, or on one date, by the time of
+//! its place: your own, or one of the places on the board. It rings once a
+//! day at most, and only for times that come round while the clock is
+//! running: starting the clock just after an alarm's time, or setting an
+//! alarm for a time just gone, doesn't ring it. If the computer was asleep
+//! when it was due, it still rings if that was less than [`GRACE`] minutes
+//! ago.
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
@@ -34,6 +37,8 @@ pub struct Alarm {
     pub place: Option<u64>,
     /// The day, by its place's calendar, it last rang: (year, day of year).
     pub rang: Option<(i32, u32)>,
+    /// One date it rings on, (year, month, day), instead of its days.
+    pub date: Option<(i32, u32, u32)>,
 }
 
 impl Default for Alarm {
@@ -48,18 +53,27 @@ impl Default for Alarm {
             days: [false; 7],
             place: None,
             rang: None,
+            date: None,
         }
     }
 }
 
 impl Alarm {
+    /// Whether it rings just once, then turns itself off: on a date, or
+    /// with no days ticked.
     pub fn once(&self) -> bool {
-        !self.days.iter().any(|&d| d)
+        self.date.is_some() || !self.days.iter().any(|&d| d)
+    }
+
+    pub fn the_date(&self) -> Option<NaiveDate> {
+        self.date
+            .and_then(|(y, m, d)| NaiveDate::from_ymd_opt(y, m, d))
     }
 
     /// The day it is due for, if it is due to ring at `now`, its place's
-    /// time.
-    pub fn due(&self, now: NaiveDateTime) -> Option<NaiveDate> {
+    /// time. Only times from `since` on count: when the clock started, or
+    /// the alarm was last changed.
+    pub fn due(&self, now: NaiveDateTime, since: NaiveDateTime) -> Option<NaiveDate> {
         if !self.on {
             return None;
         }
@@ -69,8 +83,11 @@ impl Alarm {
         for day in [today, today.pred_opt()?] {
             let at = day.and_hms_opt(self.hour, self.minute, 0)?;
             let rang = self.rang == Some((day.year(), day.ordinal()));
-            let on_day = self.once() || self.days[day.weekday().num_days_from_monday() as usize];
-            if !rang && on_day && now >= at && now < at + Duration::minutes(GRACE) {
+            let on_day = match self.date {
+                Some(_) => self.the_date() == Some(day),
+                None => self.once() || self.days[day.weekday().num_days_from_monday() as usize],
+            };
+            if !rang && on_day && at >= since && now >= at && now < at + Duration::minutes(GRACE) {
                 return Some(day);
             }
         }
@@ -85,15 +102,22 @@ impl Alarm {
         }
     }
 
-    /// Its days in words, for Settings.
-    pub fn days_text(&self) -> &'static str {
+    /// When it rings, in words, for Settings.
+    pub fn when_text(&self) -> String {
+        if let Some((y, m, d)) = self.date {
+            return match self.the_date() {
+                Some(date) => format!("Once, on {}", date.format("%a %-d %b %Y")),
+                None => format!("{d}/{m}/{y} isn't a date"),
+            };
+        }
         match self.days {
             [false, false, false, false, false, false, false] => "Once",
             [true, true, true, true, true, true, true] => "Every day",
             [true, true, true, true, true, false, false] => "Weekdays",
             [false, false, false, false, false, true, true] => "Weekends",
-            _ => "On the days ticked",
+            _ => "On the days picked",
         }
+        .to_string()
     }
 }
 
@@ -109,6 +133,13 @@ mod tests {
             .unwrap()
     }
 
+    impl Alarm {
+        /// Due, as if the clock had been running all month.
+        fn due_from_start(&self, now: NaiveDateTime) -> Option<NaiveDate> {
+            self.due(now, at(1, 0, 0))
+        }
+    }
+
     fn alarm(h: u32, m: u32) -> Alarm {
         Alarm {
             hour: h,
@@ -120,46 +151,73 @@ mod tests {
     #[test]
     fn it_rings_at_its_time_and_a_little_after() {
         let a = alarm(7, 30);
-        assert_eq!(a.due(at(27, 7, 29)), None);
-        assert!(a.due(at(27, 7, 30)).is_some());
-        assert!(a.due(at(27, 7, 39)).is_some());
-        assert_eq!(a.due(at(27, 7, 40)), None);
+        assert_eq!(a.due_from_start(at(27, 7, 29)), None);
+        assert!(a.due_from_start(at(27, 7, 30)).is_some());
+        assert!(a.due_from_start(at(27, 7, 39)).is_some());
+        assert_eq!(a.due_from_start(at(27, 7, 40)), None);
     }
 
     #[test]
     fn it_rings_once_a_day() {
         let mut a = alarm(7, 30);
         a.days = [true; 7];
-        let day = a.due(at(27, 7, 30)).unwrap();
+        let day = a.due_from_start(at(27, 7, 30)).unwrap();
         a.rung(day);
         assert!(a.on);
-        assert_eq!(a.due(at(27, 7, 31)), None);
-        assert!(a.due(at(28, 7, 30)).is_some());
+        assert_eq!(a.due_from_start(at(27, 7, 31)), None);
+        assert!(a.due_from_start(at(28, 7, 30)).is_some());
     }
 
     #[test]
     fn once_turns_itself_off() {
         let mut a = alarm(7, 30);
-        let day = a.due(at(27, 7, 30)).unwrap();
+        let day = a.due_from_start(at(27, 7, 30)).unwrap();
         a.rung(day);
         assert!(!a.on);
-        assert_eq!(a.due(at(28, 7, 30)), None);
+        assert_eq!(a.due_from_start(at(28, 7, 30)), None);
     }
 
     #[test]
     fn only_on_its_days() {
         let mut a = alarm(7, 30);
         a.days = [true, true, true, true, true, false, false];
-        assert_eq!(a.days_text(), "Weekdays");
-        assert!(a.due(at(30, 7, 30)).is_some()); // Friday
-        assert_eq!(a.due(at(31, 7, 30)), None); // Saturday
+        assert_eq!(a.when_text(), "Weekdays");
+        assert!(a.due_from_start(at(30, 7, 30)).is_some()); // Friday
+        assert_eq!(a.due_from_start(at(31, 7, 30)), None); // Saturday
     }
 
     #[test]
     fn just_before_midnight_still_rings_just_after() {
         let a = alarm(23, 58);
-        let day = a.due(at(28, 0, 3)).unwrap();
+        let day = a.due_from_start(at(28, 0, 3)).unwrap();
         assert_eq!(day, at(27, 0, 0).date());
+    }
+
+    #[test]
+    fn not_for_a_time_gone_by_when_the_clock_started() {
+        let a = alarm(7, 30);
+        // Started at 07:35: the 07:30 alarm doesn't ring.
+        assert_eq!(a.due(at(27, 7, 36), at(27, 7, 35)), None);
+        // Started at 07:20: it rings, and up to 10 minutes late after a
+        // sleep.
+        assert!(a.due(at(27, 7, 38), at(27, 7, 20)).is_some());
+        // Started on the dot of 07:30: that counts.
+        assert!(a.due(at(27, 7, 30), at(27, 7, 30)).is_some());
+    }
+
+    #[test]
+    fn on_a_date_only_that_date() {
+        let mut a = alarm(9, 0);
+        a.days = [true; 7];
+        a.date = Some((2026, 10, 29));
+        assert!(a.once());
+        assert_eq!(a.due_from_start(at(28, 9, 0)), None);
+        let day = a.due_from_start(at(29, 9, 0)).unwrap();
+        a.rung(day);
+        assert!(!a.on);
+        assert_eq!(a.when_text(), "Once, on Thu 29 Oct 2026");
+        a.date = Some((2026, 2, 30));
+        assert!(a.when_text().contains("isn't a date"));
     }
 
     #[test]
@@ -168,6 +226,6 @@ mod tests {
             on: false,
             ..alarm(7, 30)
         };
-        assert_eq!(a.due(at(27, 7, 30)), None);
+        assert_eq!(a.due_from_start(at(27, 7, 30)), None);
     }
 }

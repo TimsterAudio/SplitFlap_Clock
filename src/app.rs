@@ -27,7 +27,55 @@ const RULE: Color32 = Color32::from_rgb(38, 38, 36);
 const CAPTION: Color32 = Color32::from_rgb(130, 128, 118);
 const REGION: Color32 = Color32::from_rgb(200, 198, 188);
 const YELLOW: Color32 = Color32::from_rgb(244, 196, 48);
+/// The letters on light cards.
+const DARK_INK: Color32 = Color32::from_rgb(30, 30, 28);
+
+/// The board's colours around the cards.
+struct Palette {
+    board: Color32,
+    rule: Color32,
+    caption: Color32,
+    region: Color32,
+}
+
+impl Saved {
+    /// The colour everything without its own colour is in.
+    fn default_ink(&self) -> Color32 {
+        match (self.light_board, self.ink) {
+            (true, _) => DARK_INK,
+            (false, Ink::Yellow) => YELLOW,
+            (false, Ink::White) => WHITE,
+        }
+    }
+
+    fn palette(&self) -> Palette {
+        if self.light_board {
+            Palette {
+                board: Color32::from_rgb(206, 203, 195),
+                rule: Color32::from_rgb(178, 174, 165),
+                caption: Color32::from_rgb(98, 95, 88),
+                region: Color32::from_rgb(52, 50, 46),
+            }
+        } else {
+            Palette {
+                board: BOARD,
+                rule: RULE,
+                caption: CAPTION,
+                region: REGION,
+            }
+        }
+    }
+}
 const WHITE: Color32 = Color32::from_rgb(236, 234, 226);
+
+/// Light or dark, for the menus and the settings window.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Ink {
@@ -212,6 +260,10 @@ pub struct Saved {
     /// place's row, and after the main time.
     pub sky_places: bool,
     pub sky_main: bool,
+    /// The menus' and settings window's theme.
+    pub menus: Theme,
+    /// White cards with dark letters, instead of black with yellow or white.
+    pub light_board: bool,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -288,6 +340,8 @@ impl Default for Saved {
             clock_sound: false,
             sky_places: false,
             sky_main: false,
+            menus: Theme::System,
+            light_board: false,
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -343,6 +397,15 @@ struct Line {
     heading: Option<String>,
     /// A small caption under the line.
     note: Option<&'static str>,
+    /// Cards that are buttons: which cells, and what they do.
+    actions: Vec<(std::ops::Range<usize>, Act)>,
+}
+
+/// What a button on the board does.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Act {
+    Snooze,
+    Stop,
 }
 
 /// The room a caption takes under its line.
@@ -496,6 +559,21 @@ fn alarm_cells(r: &Ringing, h24: bool) -> Vec<Cell> {
     cells
 }
 
+/// The alarm's buttons: SNOOZE and STOP, or only STOP while it snoozes.
+fn alarm_buttons(snoozed: bool) -> (Vec<Cell>, Vec<(std::ops::Range<usize>, Act)>) {
+    let mut cells = Vec::new();
+    let mut actions = Vec::new();
+    if !snoozed {
+        cells.extend(text_cards("SNOOZE", 6));
+        actions.push((0..6, Act::Snooze));
+        cells.push(Cell::Gap(30.0));
+    }
+    let start = cells.len();
+    cells.extend(text_cards("STOP", 4));
+    actions.push((start..start + 4, Act::Stop));
+    (cells, actions)
+}
+
 /// `cells` made smaller, if need be, to fit `width`, so that a row that
 /// comes and goes, like an alarm's, never changes the board's width (and
 /// so the window's).
@@ -580,6 +658,11 @@ pub struct ClockApp {
     sound_retry: f64,
     /// Alarms ringing or snoozing, the first one on the board.
     ringing: Vec<Ringing>,
+    /// From when, by its place's time, each alarm may ring: when the clock
+    /// started or the alarm was last changed, so a time just gone doesn't
+    /// ring it.
+    armed: HashMap<u64, chrono::NaiveDateTime>,
+    beer_open: bool,
     /// When to ring the chime again.
     next_chime: f64,
     /// The board size the window was last fitted to.
@@ -621,6 +704,8 @@ impl ClockApp {
             sound_applied: false,
             sound_retry: 0.0,
             ringing: Vec::new(),
+            armed: HashMap::new(),
+            beer_open: false,
             next_chime: 0.0,
             fitted: None,
             last_window: Vec2::ZERO,
@@ -650,6 +735,7 @@ impl ClockApp {
             ink: s.time_colour.map_or(ink, rgb),
             heading: None,
             note: None,
+            actions: Vec::new(),
         }];
         if s.date {
             let date = now.format("%a %d %b %Y").to_string().to_uppercase();
@@ -659,6 +745,7 @@ impl ClockApp {
                 ink: s.date_colour.map_or(ink, rgb),
                 heading: None,
                 note: None,
+                actions: Vec::new(),
             });
         }
         let utc = Utc::now();
@@ -689,6 +776,7 @@ impl ClockApp {
                 ink: z.colour.map_or(ink, rgb),
                 heading,
                 note: None,
+                actions: Vec::new(),
             });
         }
         // The alarm's row goes under the main time, no wider than the rest.
@@ -704,11 +792,21 @@ impl ClockApp {
                     cells: fit(alarm_cells(r, s.h24), width),
                     ink,
                     heading: None,
-                    note: Some(if r.snoozed_until.is_some() {
-                        "RIGHT-CLICK OR ESC TO STOP"
-                    } else {
-                        "CLICK TO SNOOZE 9 MIN  -  RIGHT-CLICK OR ESC TO STOP"
-                    }),
+                    note: None,
+                    actions: Vec::new(),
+                },
+            );
+            // And under it, flap cards to press: SNOOZE and STOP.
+            let (cells, actions) = alarm_buttons(r.snoozed_until.is_some());
+            lines.insert(
+                2,
+                Line {
+                    key: "buttons".into(),
+                    cells: fit(cells, width),
+                    ink,
+                    heading: None,
+                    note: None,
+                    actions,
                 },
             );
         }
@@ -760,19 +858,26 @@ impl ClockApp {
 
     /// The board's own colour, which anything without its own uses.
     fn ink(&self) -> Color32 {
-        match self.saved.ink {
-            Ink::Yellow => YELLOW,
-            Ink::White => WHITE,
-        }
+        self.saved.default_ink()
     }
 
     fn look(&self) -> Look {
-        Look {
-            top: Color32::from_rgb(36, 36, 35),
-            bottom: Color32::from_rgb(29, 29, 28),
-            split: Color32::from_rgb(4, 4, 4),
-            hinge: Color32::from_rgb(70, 70, 68),
-            ink: self.ink(),
+        if self.saved.light_board {
+            Look {
+                top: Color32::from_rgb(244, 242, 236),
+                bottom: Color32::from_rgb(232, 229, 221),
+                split: Color32::from_rgb(150, 147, 140),
+                hinge: Color32::from_rgb(178, 174, 166),
+                ink: self.ink(),
+            }
+        } else {
+            Look {
+                top: Color32::from_rgb(36, 36, 35),
+                bottom: Color32::from_rgb(29, 29, 28),
+                split: Color32::from_rgb(4, 4, 4),
+                hinge: Color32::from_rgb(70, 70, 68),
+                ink: self.ink(),
+            }
         }
     }
 
@@ -890,7 +995,8 @@ impl ClockApp {
         for i in 0..self.saved.alarms.len() {
             let place = self.saved.alarms[i].place;
             let at = self.saved.time_at(place);
-            if let Some(day) = self.saved.alarms[i].due(at) {
+            let since = *self.armed.entry(self.saved.alarms[i].id).or_insert(at);
+            if let Some(day) = self.saved.alarms[i].due(at, since) {
                 self.saved.alarms[i].rung(day);
                 started.push(self.saved.alarms[i].id);
             }
@@ -960,7 +1066,8 @@ impl ClockApp {
         self.fit_window(&ctx, board, full.size(), time);
 
         let painter = ui.painter_at(full);
-        painter.rect_filled(full, 0.0, BOARD);
+        let pal = self.saved.palette();
+        painter.rect_filled(full, 0.0, pal.board);
 
         let scale = (full.width() / board.x).min(full.height() / board.y);
         let origin = full.center() - board * scale / 2.0;
@@ -971,6 +1078,8 @@ impl ClockApp {
         let mut busy = false;
         let mut y = PAD;
         let mut first_zone = true;
+        // Where the buttons on the board are, to click.
+        let mut buttons: Vec<(Rect, Act)> = Vec::new();
         let caption = FontId::new(11.0 * scale, FontFamily::Name("flap".into()));
         let region_font = FontId::new(15.0 * scale, FontFamily::Name("flap".into()));
         for (i, line) in lines.iter().enumerate() {
@@ -992,7 +1101,7 @@ impl ClockApp {
                     Align2::LEFT_BOTTOM,
                     heading,
                     region_font.clone(),
-                    REGION,
+                    pal.region,
                 );
             }
 
@@ -1002,7 +1111,7 @@ impl ClockApp {
                 painter.hline(
                     u(PAD, rule_y).x..=u(board.x - PAD, rule_y).x,
                     u(0.0, rule_y).y,
-                    (1.0_f32.max(scale), RULE),
+                    (1.0_f32.max(scale), pal.rule),
                 );
                 let time_x = x + row_width(&line.cells[..NAME_CARDS + 1]) + SMALL.y * SPACING;
                 let tail = if has_sky(&line.cells) { 5 } else { 3 };
@@ -1013,7 +1122,7 @@ impl ClockApp {
                         Align2::LEFT_BOTTOM,
                         text,
                         caption.clone(),
-                        CAPTION,
+                        pal.caption,
                     );
                 }
             }
@@ -1071,6 +1180,14 @@ impl ClockApp {
                         let font =
                             FontId::new(size.y * font * scale, FontFamily::Name("flap".into()));
                         flap.draw(&ctx, &painter, r, &font, &look);
+                        for (range, act) in &line.actions {
+                            if range.contains(&k) {
+                                match buttons.iter_mut().find(|(_, a)| a == act) {
+                                    Some((rect, _)) => *rect = rect.union(r),
+                                    None => buttons.push((r, *act)),
+                                }
+                            }
+                        }
                         x += size.x;
                         if let Some(Cell::Card { .. }) = line.cells.get(k + 1) {
                             x += size.y * SPACING;
@@ -1098,7 +1215,7 @@ impl ClockApp {
                     Align2::CENTER_TOP,
                     note,
                     caption.clone(),
-                    CAPTION,
+                    pal.caption,
                 );
             }
         }
@@ -1113,10 +1230,35 @@ impl ClockApp {
         if response.double_clicked() {
             self.settings_open = true;
         }
-        // A ringing alarm: a click snoozes it, Esc or the menu stops it.
+        // The buttons light up under the pointer, like a lit push-button.
+        let pointer = ctx.input(|i| i.pointer.hover_pos());
+        for (rect, _) in &buttons {
+            let lit = pointer.is_some_and(|p| rect.expand(4.0).contains(p));
+            let colour = if lit {
+                base.ink
+            } else {
+                base.ink.gamma_multiply(0.35)
+            };
+            painter.rect_stroke(
+                rect.expand(4.0 * scale.max(0.5)),
+                3.0,
+                egui::Stroke::new(1.5 * scale.max(0.6), colour),
+                egui::StrokeKind::Outside,
+            );
+        }
+        // A ringing alarm: STOP stops it, SNOOZE or anywhere else on the
+        // board snoozes it, and so does the menu; Esc stops it.
         if !self.ringing.is_empty() {
             if response.clicked() {
-                self.snooze();
+                let at = response.interact_pointer_pos();
+                let hit = buttons
+                    .iter()
+                    .find(|(rect, _)| at.is_some_and(|p| rect.expand(4.0).contains(p)))
+                    .map(|(_, act)| *act);
+                match hit {
+                    Some(Act::Stop) => self.ringing.clear(),
+                    _ => self.snooze(),
+                }
             }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.ringing.clear();
@@ -1230,6 +1372,49 @@ impl ClockApp {
         if let Some(id) = test {
             self.ring(id);
         }
+        // Which version this is, and the beer fund.
+        ui.add_space(16.0);
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(version_text()).weak());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("Beer money")
+                    .on_hover_text("Support the developer")
+                    .clicked()
+                {
+                    self.beer_open = true;
+                }
+            });
+        });
+        if self.beer_open {
+            let shown = egui::Modal::new(egui::Id::new("beer money")).show(ui.ctx(), |ui| {
+                ui.set_max_width(380.0);
+                ui.heading("Beer money");
+                ui.add_space(6.0);
+                ui.label(
+                    "If you like Split-Flap Clock and want to support its developer with some beer funding, send it via PayPal to:",
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(BEER_PAYPAL).monospace().strong());
+                    if ui.small_button("Copy").clicked() {
+                        ui.ctx().copy_text(BEER_PAYPAL.into());
+                    }
+                });
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new(CLINK).monospace().size(11.0));
+                ui.add_space(6.0);
+                ui.vertical_centered(|ui| {
+                    if ui.button("Cheers!").clicked() {
+                        self.beer_open = false;
+                    }
+                });
+            });
+            if shown.should_close() {
+                self.beer_open = false;
+            }
+        }
     }
 
     fn settings_ui_inner(&mut self, ui: &mut Ui, test: &mut Option<u64>) {
@@ -1240,17 +1425,33 @@ impl ClockApp {
             .spacing([16.0, 8.0])
             .show(ui, |ui| {
                 ui.label("Digits");
+                ui.add_enabled_ui(!s.light_board, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut s.ink, Ink::Yellow, "Yellow");
+                        ui.radio_value(&mut s.ink, Ink::White, "White");
+                    });
+                })
+                .response
+                .on_disabled_hover_text("White cards have dark letters");
+                ui.end_row();
+                ui.label("Board");
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut s.ink, Ink::Yellow, "Yellow");
-                    ui.radio_value(&mut s.ink, Ink::White, "White");
+                    ui.radio_value(&mut s.light_board, false, "Black cards");
+                    ui.radio_value(&mut s.light_board, true, "White cards");
                 });
+                ui.end_row();
+                ui.label("Menus");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut s.menus, Theme::System, "Like my system");
+                    ui.radio_value(&mut s.menus, Theme::Light, "Light");
+                    ui.radio_value(&mut s.menus, Theme::Dark, "Dark");
+                })
+                .response
+                .on_hover_text("The right-click menu and this window");
                 ui.end_row();
                 ui.label("Colours");
                 ui.horizontal(|ui| {
-                    let ink = match s.ink {
-                        Ink::Yellow => YELLOW,
-                        Ink::White => WHITE,
-                    };
+                    let ink = s.default_ink();
                     ui.label("Time");
                     colour_choice(ui, "time", &mut s.time_colour, ink);
                     ui.add_space(8.0);
@@ -1376,8 +1577,9 @@ impl ClockApp {
             .map(|z| (z.id, format!("{} ({})", z.label.to_uppercase(), z.tz)))
             .collect();
         let mut remove = None;
+        let mut changed = Vec::new();
         for (i, a) in s.alarms.iter_mut().enumerate() {
-            let before = (a.hour, a.minute, a.days, a.place, a.on);
+            let before = (a.hour, a.minute, a.days, a.place, a.on, a.date);
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
@@ -1426,13 +1628,46 @@ impl ClockApp {
                 });
                 ui.horizontal(|ui| {
                     ui.label("Repeat");
+                    // The days it rings on stand out: lit yellow, like a
+                    // board's lamps; the others stay dim.
+                    let dated = a.date.is_some();
                     for (d, name) in ["M", "T", "W", "T", "F", "S", "S"].iter().enumerate() {
-                        let on = a.days[d];
-                        if ui.selectable_label(on, *name).clicked() {
-                            a.days[d] = !on;
+                        let on = a.days[d] && !dated;
+                        let (fill, text) = if on {
+                            (YELLOW, Color32::from_rgb(24, 22, 16))
+                        } else {
+                            (
+                                ui.visuals().extreme_bg_color,
+                                ui.visuals().weak_text_color(),
+                            )
+                        };
+                        let day =
+                            egui::Button::new(egui::RichText::new(*name).strong().color(text))
+                                .fill(fill)
+                                .min_size(vec2(24.0, 20.0));
+                        if ui.add_enabled(!dated, day).clicked() {
+                            a.days[d] = !a.days[d];
                         }
                     }
-                    ui.label(egui::RichText::new(a.days_text()).weak());
+                    ui.label(egui::RichText::new(a.when_text()).weak());
+                });
+                ui.horizontal(|ui| {
+                    let mut dated = a.date.is_some();
+                    if ui
+                        .checkbox(&mut dated, "On a date")
+                        .on_hover_text("Ring once, on this day, instead of on days of the week")
+                        .changed()
+                    {
+                        a.date = dated.then(|| {
+                            let t = chrono::Local::now().date_naive() + chrono::Duration::days(1);
+                            (t.year(), t.month(), t.day())
+                        });
+                    }
+                    if let Some((y, m, d)) = &mut a.date {
+                        ui.add(egui::DragValue::new(d).range(1..=31).prefix("day "));
+                        ui.add(egui::DragValue::new(m).range(1..=12).prefix("month "));
+                        ui.add(egui::DragValue::new(y).range(2000..=2100));
+                    }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Time at");
@@ -1452,9 +1687,14 @@ impl ClockApp {
                 });
             });
             // A changed alarm can ring again today, at its new time.
-            if before != (a.hour, a.minute, a.days, a.place, a.on) {
+            if before != (a.hour, a.minute, a.days, a.place, a.on, a.date) {
                 a.rang = None;
+                changed.push(a.id);
             }
+        }
+        // A changed alarm only rings from now on, not for a time just gone.
+        for id in changed {
+            self.armed.remove(&id);
         }
         if let Some(i) = remove {
             s.alarms.remove(i);
@@ -1530,10 +1770,7 @@ impl ClockApp {
         ui.heading("Other places");
         ui.label("Listed under the main clock, grouped by region, in this order.");
         ui.add_space(4.0);
-        let board_ink = match s.ink {
-            Ink::Yellow => YELLOW,
-            Ink::White => WHITE,
-        };
+        let board_ink = s.default_ink();
         let utc = Utc::now();
         let utc_min = (utc.hour() * 60 + utc.minute()) as i32;
         let mut remove = None;
@@ -1683,6 +1920,11 @@ impl eframe::App for ClockApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_window(&ctx);
+        ctx.set_theme(match self.saved.menus {
+            Theme::System => egui::ThemePreference::System,
+            Theme::Light => egui::ThemePreference::Light,
+            Theme::Dark => egui::ThemePreference::Dark,
+        });
         let time = ctx.input(|i| i.time);
         self.alarms(time);
         self.apply_sound(time);
@@ -1711,7 +1953,33 @@ impl eframe::App for ClockApp {
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        BOARD.to_normalized_gamma_f32()
+        self.saved.palette().board.to_normalized_gamma_f32()
+    }
+}
+
+const BEER_PAYPAL: &str = "spoolbeermoney@outlook.com";
+const CLINK: &str = r"            \   |   /
+         *   CLINK!   *
+            /   |   \
+   .-~~~~~~-.  .-~~~~~~-.
+  (  o  o  . )( .  o  o  )
+   |~~~~~~~~|  |~~~~~~~~|
+ __|  o  .  |  |  .  o  |__
+(__|    o   |  |   o    |__)
+ __| .    o |  | o    . |__
+(__|  o     |  |     o  |__)
+   |________|  |________|";
+
+/// "Split-Flap Clock 1.1.0, released 29 Oct 2026", from the version and
+/// the date the changelog gives it (see build.rs).
+fn version_text() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    match chrono::NaiveDate::parse_from_str(env!("RELEASE_DATE"), "%Y-%m-%d") {
+        Ok(d) => format!(
+            "Split-Flap Clock {version}, released {}",
+            d.format("%-d %b %Y")
+        ),
+        Err(_) => format!("Split-Flap Clock {version}, a test build"),
     }
 }
 

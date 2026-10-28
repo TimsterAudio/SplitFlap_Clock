@@ -6,6 +6,7 @@ mod icon;
 
 fn main() {
     println!("cargo:rerun-if-changed=src/icon.rs");
+    release_date();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
@@ -17,6 +18,20 @@ fn main() {
     res.set("FileDescription", "Split-Flap Clock");
     res.set("ProductName", "Split-Flap Clock");
     res.compile().expect("compile the Windows resources");
+}
+
+/// Tells the app the date its version was released, from the changelog's
+/// "## X.Y.Z – YYYY-MM-DD" heading, or nothing for a version not released.
+fn release_date() {
+    println!("cargo:rerun-if-changed=CHANGELOG.md");
+    let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+    let changelog = std::fs::read_to_string("CHANGELOG.md").unwrap_or_default();
+    let date = changelog
+        .lines()
+        .find_map(|l| l.strip_prefix(&format!("## {version} ")))
+        .and_then(|rest| rest.split_whitespace().last())
+        .unwrap_or("");
+    println!("cargo:rustc-env=RELEASE_DATE={date}");
 }
 
 /// A one-image .ico holding a 32-bit bitmap.
