@@ -8,7 +8,9 @@ departures.
 - Big split-flap display of the local time, with a small date line under it
 - Yellow or white digits on black
 - 12- or 24-hour time, with seconds if you want them
-- Up to ten other time zones, each with its own name, time and day
+- As many other places as you like, each with its own name, time and day, from its time zone or set by hand
+- Group places into regions, with a heading each, in the order you choose
+- Colours of your own for the main time, the date and each place
 - The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
 - Can start when you log in
@@ -21,12 +23,19 @@ Download it from [Releases](https://github.com/TimsterAudio/SplitFlap_Clock/rele
 `splitflap-clock.exe` for Windows, or `splitflap-clock-linux-x86_64` for Linux
 (make it executable with `chmod +x`). Then run it.
 
+**New to it?** Open **`Split-Flap Clock User Guide.html`** ("Split-Flap Clock
+for Dummies"): everything on the board and in Settings explained, with
+itineraries, troubleshooting and a fair amount of 1970s airport cheek. Each
+release has it as `splitflap-clock-user-guide.html` too.
+
 - **Right-click** the clock for the menu, or **double-click** it (or use the
   ⚙ in the corner) to open Settings.
 - **Drag** the face to move the window. Resize the window, or use the Size
   slider in Settings; the board keeps its shape.
-- Add time zones in Settings by searching for a city, such as `Tokyo` or
-  `New York`. Edit the name shown on the board, and move zones up and down.
+- Add places in Settings by searching for a city, such as `Tokyo` or
+  `New York`, and pressing **Add**. Edit the name shown on the board, give it
+  a region and a colour, set its time by hand if you like, and move places
+  and regions up and down.
 
 **Start when I log in** adds the clock to the Windows Run list (it shows in
 Task Manager's Startup apps) or writes `~/.config/autostart/splitflap-clock.desktop`
@@ -71,4 +80,7 @@ cargo test
 
 The board lettering is Barlow Condensed SemiBold by The Barlow Project
 Authors, under the SIL Open Font License (`assets/OFL.txt`). It is built
-into the binary.
+into the binary, and into the user guide with Barlow Semi Condensed.
+
+Thanks to Oscar, who asked for unlimited places, hand-set times, colours and
+regions, then tested them all and found the colour you couldn't paste.

@@ -8,7 +8,8 @@
 - **Set a place's time by hand**: choose "Set by hand" and enter the time it is there; the clock keeps that offset from UTC (without summer time changes).
 - **Colours**: the main time, the date and each place can have their own colour, picked in Settings; Reset goes back to the board's yellow or white. Next to every colour button is a box showing the colour as `#RRGGBB`: type or paste a colour into it as `#RRGGBB`, `#RGB`, or `R, G, B`, which is what the picker's copy button gives.
 - **Regions**: give places a region and the board groups them under a heading per region; places with no region go under OTHER unless they come first. Move regions up and down the board in Settings.
-- A user guide: `Split-Flap Clock User Guide.html`.
+- A user guide: `Split-Flap Clock User Guide.html`, also attached to each release.
+- Thanks to Oscar, who asked for all of the above and tested it.
 
 ## 0.4.0 – 2026-10-27
 
