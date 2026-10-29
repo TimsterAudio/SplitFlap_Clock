@@ -1,7 +1,9 @@
 # Publishes a GitHub release whenever main carries a version (from
 # Cargo.toml) that hasn't been released yet. Bump the version, add its
 # section to CHANGELOG.md, push to main: the release `vX.Y.Z` appears with
-# the Windows exe and the Linux binary, and that section as its notes.
+# the Windows exe, the Linux binary, the user guide and BEER MONEY.TXT, and
+# that section as its notes. A change to BEER MONEY.TXT alone refreshes it
+# on the latest release.
 
 name: Release
 
@@ -12,6 +14,7 @@ on:
       - Cargo.toml
       - CHANGELOG.md
       - .github/workflows/release.yml
+      - BEER MONEY.TXT
   workflow_dispatch:
 
 concurrency:
@@ -84,6 +87,7 @@ jobs:
           cp "Split-Flap Clock User Guide.html" dist/splitflap-clock-user-guide.html
           cp "Split-Flap Clock User Guide (dark).pdf" dist/splitflap-clock-user-guide-dark.pdf
           cp "Split-Flap Clock User Guide (light).pdf" dist/splitflap-clock-user-guide-light.pdf
+          cp "BEER MONEY.TXT" dist/beer-money.txt
       - name: Release notes from CHANGELOG.md
         run: |
           ver="${{ needs.version.outputs.version }}"
@@ -96,6 +100,7 @@ jobs:
           - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
           - **User guide**: `splitflap-clock-user-guide.html`. Open it in any web browser.
           - **User guide as PDFs**: `splitflap-clock-user-guide-dark.pdf` and `splitflap-clock-user-guide-light.pdf`.
+          - **Beer money**: `beer-money.txt`. The other Timster's Audio Works apps, and how to shout the developer a beer.
           NOTES
           cat notes.md
       - name: Create the release
@@ -109,3 +114,20 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Split-Flap Clock $ver" \
             --notes-file notes.md
+
+  # A release that's out already still gets the latest BEER MONEY.TXT.
+  beer-money:
+    needs: version
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add BEER MONEY.TXT to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "BEER MONEY.TXT" beer-money.txt
+          gh release upload "v${{ needs.version.outputs.version }}" beer-money.txt \
+            --repo "$GITHUB_REPOSITORY" --clobber

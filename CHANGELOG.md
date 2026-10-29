@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Each release carries `beer-money.txt` too: the other Timster's Audio Works apps, and how to shout the developer a beer.
+
 ## 1.1.0 – 2026-10-29
 
 - Each alarm can have its own **Colour**, in Settings next to its reason: its row on the board, and its SNOOZE and STOP cards, ring in that colour. **Reset** goes back to the board's.
