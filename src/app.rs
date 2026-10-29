@@ -545,6 +545,8 @@ struct Ringing {
     /// When it started ringing (again), in seconds since 1970.
     since: i64,
     snoozed_until: Option<i64>,
+    /// Its own colour, or the board's.
+    colour: Option<[u8; 3]>,
 }
 
 /// The alarm's row, as a board announces a flight: its label, its time,
@@ -790,6 +792,7 @@ impl ClockApp {
         }
         // The alarm's row goes under the main time, no wider than the rest.
         if let Some(r) = self.ringing.first() {
+            let ink = r.colour.map_or(ink, rgb);
             let width = lines
                 .iter()
                 .map(|l| row_width(&l.cells))
@@ -1052,6 +1055,7 @@ impl ClockApp {
             place: a.place,
             since: Utc::now().timestamp(),
             snoozed_until: None,
+            colour: a.colour,
         };
         self.ringing.retain(|x| x.id != id);
         self.ringing.push(r);
@@ -1096,7 +1100,7 @@ impl ClockApp {
         let mut y = PAD;
         let mut first_zone = true;
         // Where the buttons on the board are, to click.
-        let mut buttons: Vec<(Rect, Act)> = Vec::new();
+        let mut buttons: Vec<(Rect, Act, Color32)> = Vec::new();
         let caption = FontId::new(11.0 * scale, FontFamily::Name("flap".into()));
         let region_font = FontId::new(15.0 * scale, FontFamily::Name("flap".into()));
         for (i, line) in lines.iter().enumerate() {
@@ -1199,9 +1203,9 @@ impl ClockApp {
                         flap.draw(&ctx, &painter, r, &font, &look);
                         for (range, act) in &line.actions {
                             if range.contains(&k) {
-                                match buttons.iter_mut().find(|(_, a)| a == act) {
-                                    Some((rect, _)) => *rect = rect.union(r),
-                                    None => buttons.push((r, *act)),
+                                match buttons.iter_mut().find(|(_, a, _)| a == act) {
+                                    Some((rect, _, _)) => *rect = rect.union(r),
+                                    None => buttons.push((r, *act, line.ink)),
                                 }
                             }
                         }
@@ -1249,13 +1253,9 @@ impl ClockApp {
         }
         // The buttons light up under the pointer, like a lit push-button.
         let pointer = ctx.input(|i| i.pointer.hover_pos());
-        for (rect, _) in &buttons {
+        for (rect, _, ink) in &buttons {
             let lit = pointer.is_some_and(|p| rect.expand(4.0).contains(p));
-            let colour = if lit {
-                base.ink
-            } else {
-                base.ink.gamma_multiply(0.35)
-            };
+            let colour = if lit { *ink } else { ink.gamma_multiply(0.35) };
             painter.rect_stroke(
                 rect.expand(4.0 * scale.max(0.5)),
                 3.0,
@@ -1270,8 +1270,8 @@ impl ClockApp {
                 let at = response.interact_pointer_pos();
                 let hit = buttons
                     .iter()
-                    .find(|(rect, _)| at.is_some_and(|p| rect.expand(4.0).contains(p)))
-                    .map(|(_, act)| *act);
+                    .find(|(rect, _, _)| at.is_some_and(|p| rect.expand(4.0).contains(p)))
+                    .map(|(_, act, _)| *act);
                 match hit {
                     Some(Act::Stop) => self.ringing.clear(),
                     _ => self.snooze(),
@@ -1627,6 +1627,7 @@ impl ClockApp {
             .collect();
         let mut remove = None;
         let mut changed = Vec::new();
+        let board_ink = s.default_ink();
         for (i, a) in s.alarms.iter_mut().enumerate() {
             let before = (a.hour, a.minute, a.days, a.place, a.on, a.date);
             egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -1674,6 +1675,8 @@ impl ClockApp {
                     .on_hover_text(
                         "What it's for: the board shows it instead of NOW when it rings",
                     );
+                    ui.label("Colour");
+                    colour_choice(ui, ("alarm", a.id), &mut a.colour, board_ink);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Repeat");
@@ -2267,6 +2270,7 @@ mod tests {
             place: None,
             since: 0,
             snoozed_until: None,
+            colour: None,
         };
         let main = time_cells(9, 5, None, true, true);
         let row = fit(alarm_cells(&r, false), row_width(&main));
@@ -2286,6 +2290,7 @@ mod tests {
             place: None,
             since: 0,
             snoozed_until: None,
+            colour: None,
         };
         // NOW, and only NOW: it doesn't change while it rings.
         let row = texts(&alarm_cells(&r, true));
@@ -2304,6 +2309,7 @@ mod tests {
             alarm_cells(
                 &Ringing {
                     snoozed_until: None,
+                    colour: None,
                     ..r
                 },
                 true

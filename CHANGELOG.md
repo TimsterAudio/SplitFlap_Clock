@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Each alarm can have its own **Colour**, in Settings next to its reason: its row on the board, and its SNOOZE and STOP cards, ring in that colour. **Reset** goes back to the board's.
+
 - **Card brightness**, in Settings: lighter cards with brighter pins, so the split and the edges show up better against the board (on white cards, a darker split and pins). **Classic** goes back to the usual look.
 
 - The user guide covers everything in 1.1: day and night (a new Gate 09), alarm reasons, lit days and dates, the SNOOZE and STOP cards, white cards, light or dark menus, flip speed, the version line and beer money.
