@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 – 2026-10-29
 
 - Each alarm can have its own **Colour**, in Settings next to its reason: its row on the board, and its SNOOZE and STOP cards, ring in that colour. **Reset** goes back to the board's.
 
@@ -8,7 +8,7 @@
 
 - **Card brightness**, in Settings: lighter cards with brighter pins, so the split and the edges show up better against the board (on white cards, a darker split and pins). **Classic** goes back to the usual look.
 
-- The user guide covers everything in 1.1: day and night (a new Gate 09), alarm reasons, lit days and dates, the SNOOZE and STOP cards, white cards, light or dark menus, flip speed, the version line and beer money.
+- The user guide covers everything in 1.1: day and night (a new Gate 09), lighting and bulbs (a new Gate 10), alarm reasons, colours, lit days and dates, the SNOOZE and STOP cards, white cards, card brightness, light or dark menus, flip speed, the version line and beer money.
 
 - **Flip speed**, in Settings: how fast the flaps fall, from a quarter as fast (a stately board) to four times as fast (a frantic one), with **Normal** to go back. It sets everything: each flap's fall, the spin through the alphabet, and the ripple at start-up and on refreshes.
 

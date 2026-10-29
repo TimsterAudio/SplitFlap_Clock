@@ -158,3 +158,13 @@ html.paged main{max-width:none;border:0;padding:13mm 14mm;min-height:0;-webkit-b
 .fl.sky svg{width:.78em;height:.78em;vertical-align:-.12em;fill:currentColor}
 .demo .row.buttons{text-align:center;margin-top:.5em}
 .btn{display:inline-block;border:1.5px solid var(--flap);border-radius:4px;padding:2px 3px;opacity:.9}
+.lamps-demo{position:relative;overflow:hidden}
+.lamps-demo .fl{box-shadow:0 .12em .3em rgba(0,0,0,.85)}
+.lamps-demo::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:
+radial-gradient(ellipse 15% 9% at 16.7% 0,rgba(255,190,115,.75),transparent),
+radial-gradient(ellipse 15% 9% at 50% 0,rgba(255,190,115,.75),transparent),
+radial-gradient(ellipse 22% 75% at 16.7% 0,rgba(255,165,85,.13),transparent),
+radial-gradient(ellipse 22% 75% at 50% 0,rgba(255,165,85,.13),transparent),
+linear-gradient(to right,transparent 58%,rgba(0,0,0,.62) 82%),
+linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
+.t tr:first-child{break-after:avoid}
