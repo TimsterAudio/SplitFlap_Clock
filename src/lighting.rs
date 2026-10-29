@@ -2,7 +2,7 @@
 //! throwing a warm pool of light down the board, brightest near the top and
 //! fading away below. Once in a while, days apart, a bulb flickers, then
 //! either comes good or dies, leaving its part of the board in shadow until
-//! it's replaced.
+//! it's replaced: after a while by itself, or by hand, by clicking it.
 //!
 //! The light is drawn over the finished board: a fine grid, darkened where
 //! the lamps don't reach and warmed where they do, so it falls on the cards,
@@ -75,6 +75,27 @@ impl Mood {
 
 const DAY: f64 = 24.0 * 3600.0;
 
+/// Who replaces a dead bulb.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
+pub enum Replace {
+    /// Someone comes round with a new one after a minute or so.
+    #[default]
+    Automatically,
+    /// It stays out, even when the clock is restarted, until it's clicked.
+    ByHand,
+}
+
+impl Replace {
+    pub const ALL: [Replace; 2] = [Replace::Automatically, Replace::ByHand];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Replace::Automatically => "Replaced for you",
+            Replace::ByHand => "Replace by hand",
+        }
+    }
+}
+
 /// How often bulbs fail.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
 pub enum Failures {
@@ -129,7 +150,8 @@ enum State {
         next: f64,
         dies: bool,
     },
-    /// Out until it's replaced, at `until`.
+    /// Out until it's replaced, at `until`, or, if that's infinite, by
+    /// hand.
     Dead {
         until: f64,
     },
@@ -174,7 +196,7 @@ impl Lighting {
     /// anything is changing, so the board should be drawn again soon. The
     /// time since the last call is measured, not taken from the frame rate,
     /// as a still board is only drawn about once a second.
-    pub fn update(&mut self, n: usize, time: f64, failures: Failures) -> bool {
+    pub fn update(&mut self, n: usize, time: f64, failures: Failures, replace: Replace) -> bool {
         let dt = self.last.map_or(0.0, |last| (time - last).clamp(0.0, 2.0));
         self.last = Some(time);
         self.lamps.resize(n, Lamp::new());
@@ -210,7 +232,7 @@ impl Lighting {
                     if time >= until {
                         if dies {
                             lamp.state = State::Dead {
-                                until: time + self.rng.between(20.0, 90.0),
+                                until: f64::INFINITY,
                             };
                             lamp.target = 0.0;
                         } else {
@@ -231,7 +253,16 @@ impl Lighting {
                 }
                 State::Dead { until } => {
                     lamp.target = 0.0;
-                    if time >= until {
+                    if replace == Replace::Automatically && until.is_infinite() {
+                        // Someone will be round with a new one.
+                        lamp.state = State::Dead {
+                            until: time + self.rng.between(20.0, 90.0),
+                        };
+                    } else if replace == Replace::ByHand && until.is_finite() {
+                        lamp.state = State::Dead {
+                            until: f64::INFINITY,
+                        };
+                    } else if time >= until {
                         // A new bulb, which sputters for a moment on.
                         let until = time + self.rng.between(0.3, 1.2);
                         lamp.state = State::Flicker {
@@ -251,6 +282,59 @@ impl Lighting {
             self.lamps[i] = lamp;
         }
         busy
+    }
+
+    /// The bulbs that are out, by their place from the left.
+    pub fn dead(&self) -> Vec<usize> {
+        (0..self.lamps.len())
+            .filter(|&i| matches!(self.lamps[i].state, State::Dead { .. }))
+            .collect()
+    }
+
+    /// Puts back the bulbs that were out when the clock last ran.
+    pub fn restore(&mut self, dead: &[usize]) {
+        for &i in dead {
+            if i >= self.lamps.len() {
+                self.lamps.resize(i + 1, Lamp::new());
+            }
+            self.lamps[i] = Lamp {
+                state: State::Dead {
+                    until: f64::INFINITY,
+                },
+                power: 0.0,
+                target: 0.0,
+            };
+        }
+    }
+
+    /// Screws in a new bulb at `i`, if that one is out: it sputters for a
+    /// moment, then comes on.
+    pub fn replace(&mut self, i: usize, time: f64) -> bool {
+        match self.lamps.get_mut(i) {
+            Some(lamp) if matches!(lamp.state, State::Dead { .. }) => {
+                lamp.state = State::Flicker {
+                    until: time + self.rng.between(0.3, 1.2),
+                    next: time,
+                    dies: false,
+                };
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The lamp at `pos`, over the board at `rect`: within its glow at the
+    /// top edge.
+    pub fn lamp_at(&self, rect: Rect, pos: Pos2) -> Option<usize> {
+        let n = self.lamps.len();
+        if n == 0 || !rect.contains(pos) {
+            return None;
+        }
+        let w = rect.width() / n as f32;
+        let i = (((pos.x - rect.min.x) / w) as usize).min(n - 1);
+        let centre = rect.min.x + w * (i as f32 + 0.5);
+        let deep = (rect.height() * 0.12).max(24.0);
+        ((pos.x - centre).abs() < w * 0.42 && pos.y - rect.min.y < deep).then_some(i)
     }
 
     /// How lit a point is, at `x` across and `y` down the board, both from 0
@@ -352,7 +436,7 @@ mod tests {
     #[test]
     fn brightest_under_a_lamp_and_near_the_top() {
         let mut l = Lighting::new(Rng::with_seed(1));
-        l.update(3, 0.0, Failures::Never);
+        l.update(3, 0.0, Failures::Never, Replace::Automatically);
         let look = Mood::Warm.look().unwrap();
         let under = l.light(&look, 0.5, 0.1).0;
         let between = l.light(&look, 1.0 / 3.0, 0.1).0;
@@ -364,7 +448,7 @@ mod tests {
     #[test]
     fn a_dead_bulb_leaves_its_pool_dark_until_replaced() {
         let mut l = Lighting::new(Rng::with_seed(2));
-        l.update(3, 0.0, Failures::Sometimes);
+        l.update(3, 0.0, Failures::Sometimes, Replace::Automatically);
         l.lamps[1].state = State::Flicker {
             until: 1.0,
             next: 0.0,
@@ -372,7 +456,7 @@ mod tests {
         };
         let mut t = 0.0;
         while t < 3.0 {
-            l.update(3, t, Failures::Sometimes);
+            l.update(3, t, Failures::Sometimes, Replace::Automatically);
             t += 0.016;
         }
         assert!(matches!(l.lamps[1].state, State::Dead { .. }));
@@ -382,10 +466,46 @@ mod tests {
         // And comes back on, in time.
         let mut t = 3.0;
         while t < 100.0 {
-            l.update(3, t, Failures::Never);
+            l.update(3, t, Failures::Never, Replace::Automatically);
             t += 0.05;
         }
         assert!(l.lamps[1].power > 0.95);
+    }
+
+    #[test]
+    fn by_hand_a_dead_bulb_stays_out_until_it_is_clicked() {
+        let mut l = Lighting::new(Rng::with_seed(4));
+        let rect = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(600.0, 300.0));
+        l.update(3, 0.0, Failures::Never, Replace::ByHand);
+        l.lamps[2].state = State::Flicker {
+            until: 1.0,
+            next: 0.0,
+            dies: true,
+        };
+        let mut t = 0.0;
+        while t < 600.0 {
+            l.update(3, t, Failures::Sometimes, Replace::ByHand);
+            t += 0.5;
+        }
+        assert_eq!(l.dead(), vec![2]);
+        // Restarted, it's still out.
+        let mut again = Lighting::new(Rng::with_seed(5));
+        again.restore(&l.dead());
+        again.update(3, 0.0, Failures::Sometimes, Replace::ByHand);
+        assert_eq!(again.dead(), vec![2]);
+        // A click between the lamps, or low on the board, misses.
+        assert_eq!(again.lamp_at(rect, pos2(200.0, 5.0)), None);
+        assert_eq!(again.lamp_at(rect, pos2(500.0, 200.0)), None);
+        assert!(!again.replace(1, 0.0));
+        let at = again.lamp_at(rect, pos2(510.0, 8.0)).unwrap();
+        assert!(again.replace(at, 0.0));
+        let mut t = 0.0;
+        while t < 3.0 {
+            again.update(3, t, Failures::Sometimes, Replace::ByHand);
+            t += 0.016;
+        }
+        assert!(again.dead().is_empty());
+        assert!(again.lamps[2].power > 0.95);
     }
 
     #[test]
@@ -396,7 +516,7 @@ mod tests {
         // Thirty days, with a bulb failing about once a day.
         while t < 30.0 * DAY {
             let before: Vec<bool> = l.lamps.iter().map(|x| x.state == State::Lit).collect();
-            l.update(4, t, Failures::Often);
+            l.update(4, t, Failures::Often, Replace::Automatically);
             for (i, lamp) in l.lamps.iter().enumerate() {
                 if before.get(i) == Some(&true) && lamp.state != State::Lit {
                     starts += 1;

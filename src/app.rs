@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::alarm::{self, Alarm};
 use crate::flap::{Drum, Flap, Look};
-use crate::lighting::{Failures, Lighting, Mood};
+use crate::lighting::{Failures, Lighting, Mood, Replace};
 use crate::rng::Rng;
 use crate::sky::{sky, Sky};
 use crate::sound::{Click, Sound};
@@ -275,6 +275,10 @@ pub struct Saved {
     /// Lamps above the board, and how often their bulbs fail.
     pub lighting: Mood,
     pub bulbs: Failures,
+    /// Whether dead bulbs are replaced for you, or by clicking them; and,
+    /// by hand, the ones that are out, by their place from the left.
+    pub replace: Replace,
+    pub dead_bulbs: Vec<usize>,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -357,6 +361,8 @@ impl Default for Saved {
             card_brightness: 0.0,
             lighting: Mood::Off,
             bulbs: Failures::Sometimes,
+            replace: Replace::Automatically,
+            dead_bulbs: Vec::new(),
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -695,6 +701,11 @@ impl ClockApp {
             .and_then(|s| eframe::get_value(s, eframe::APP_KEY))
             .unwrap_or_default();
         saved.number();
+        // Bulbs that were out, to be replaced by hand, still are.
+        let mut lighting = Lighting::new(Rng::seeded());
+        if saved.replace == Replace::ByHand {
+            lighting.restore(&saved.dead_bulbs);
+        }
         Self {
             saved,
             flaps: HashMap::new(),
@@ -722,7 +733,7 @@ impl ClockApp {
             ringing: Vec::new(),
             armed: HashMap::new(),
             beer_open: false,
-            lighting: Lighting::new(Rng::seeded()),
+            lighting,
             next_chime: 0.0,
             fitted: None,
             last_window: Vec2::ZERO,
@@ -1106,7 +1117,17 @@ impl ClockApp {
         let shadow = mood.shadow();
         if mood != Mood::Off {
             let lamps = ((board.x / 230.0).round() as usize).max(2);
-            busy |= self.lighting.update(lamps, time, self.saved.bulbs);
+            busy |= self
+                .lighting
+                .update(lamps, time, self.saved.bulbs, self.saved.replace);
+            if self.saved.replace == Replace::ByHand {
+                let dead = self.lighting.dead();
+                if dead != self.saved.dead_bulbs {
+                    self.saved.dead_bulbs = dead;
+                }
+            } else if !self.saved.dead_bulbs.is_empty() {
+                self.saved.dead_bulbs.clear();
+            }
         }
         let mut y = PAD;
         let mut first_zone = true;
@@ -1277,6 +1298,20 @@ impl ClockApp {
         }
         // The lamps' light over everything.
         self.lighting.draw(&painter, full, mood);
+        // A dead bulb, to be replaced by hand: click it.
+        let dead_lamp = if mood != Mood::Off && self.saved.replace == Replace::ByHand {
+            ctx.input(|i| i.pointer.hover_pos())
+                .and_then(|p| self.lighting.lamp_at(full, p))
+                .filter(|i| self.saved.dead_bulbs.contains(i))
+        } else {
+            None
+        };
+        if dead_lamp.is_some() {
+            ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+            response
+                .clone()
+                .on_hover_text_at_pointer("Click to put in a new bulb");
+        }
         // The buttons light up under the pointer, like a lit push-button.
         let pointer = ctx.input(|i| i.pointer.hover_pos());
         for (rect, _) in &buttons {
@@ -1295,8 +1330,13 @@ impl ClockApp {
         }
         // A ringing alarm: STOP stops it, SNOOZE or anywhere else on the
         // board snoozes it, and so does the menu; Esc stops it.
+        let replaced =
+            response.clicked() && dead_lamp.is_some_and(|i| self.lighting.replace(i, time));
+        if replaced {
+            ctx.request_repaint();
+        }
         if !self.ringing.is_empty() {
-            if response.clicked() {
+            if response.clicked() && !replaced {
                 let at = response.interact_pointer_pos();
                 let hit = buttons
                     .iter()
@@ -1346,6 +1386,19 @@ impl ClockApp {
             }
             if ui.checkbox(&mut self.saved.sound, "Sound").changed() {
                 ui.close();
+            }
+            let out = self.saved.dead_bulbs.len();
+            if mood != Mood::Off && self.saved.replace == Replace::ByHand && out > 0 {
+                let text = match out {
+                    1 => "Replace the dead bulb".to_string(),
+                    n => format!("Replace the {n} dead bulbs"),
+                };
+                if ui.button(text).clicked() {
+                    for i in self.saved.dead_bulbs.clone() {
+                        self.lighting.replace(i, time);
+                    }
+                    ui.close();
+                }
             }
             if ui.button("Refresh the board").clicked() {
                 self.refresh_now = true;
@@ -1507,7 +1560,16 @@ impl ClockApp {
                                 }
                             })
                             .response
-                            .on_hover_text("Now and then a bulb flickers, and may go out for a while");
+                            .on_hover_text("Once in a while a bulb flickers, and may go out");
+                        egui::ComboBox::from_id_salt("replace")
+                            .selected_text(s.replace.label())
+                            .show_ui(ui, |ui| {
+                                for r in Replace::ALL {
+                                    ui.selectable_value(&mut s.replace, r, r.label());
+                                }
+                            })
+                            .response
+                            .on_hover_text("By hand, a dead bulb stays out, even after a restart, until you click it on the board (or right-click the clock)");
                     });
                 });
                 ui.end_row();
