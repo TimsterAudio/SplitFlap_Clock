@@ -39,6 +39,8 @@ pub struct Alarm {
     pub rang: Option<(i32, u32)>,
     /// One date it rings on, (year, month, day), instead of its days.
     pub date: Option<(i32, u32, u32)>,
+    /// Its own colour on the board when it rings, or the board's.
+    pub colour: Option<[u8; 3]>,
 }
 
 impl Default for Alarm {
@@ -54,6 +56,7 @@ impl Default for Alarm {
             place: None,
             rang: None,
             date: None,
+            colour: None,
         }
     }
 }
