@@ -1,8 +1,8 @@
 //! Starting the clock when the user logs in.
 //!
 //! The system holds the setting, not the clock's saved settings, so it is
-//! read back from there: a Run entry in the registry on Windows, and an
-//! XDG autostart entry on Linux.
+//! read back from there: a Run entry in the registry on Windows, an XDG
+//! autostart entry on Linux, and a launch agent on macOS.
 
 use std::path::PathBuf;
 
@@ -87,7 +87,77 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod imp {
+    use std::path::PathBuf;
+
+    fn entry() -> Option<PathBuf> {
+        let home = std::env::var_os("HOME").filter(|v| !v.is_empty())?;
+        Some(
+            PathBuf::from(home)
+                .join("Library/LaunchAgents")
+                .join("com.timstersaudioworks.splitflapclock.plist"),
+        )
+    }
+
+    pub fn enabled() -> bool {
+        entry().is_some_and(|p| p.exists())
+    }
+
+    pub fn set(on: bool) -> Result<(), String> {
+        let path = entry().ok_or("Can't find the launch agents folder: HOME isn't set")?;
+        let fail = |e: std::io::Error| format!("Can't change {}: {e}", path.display());
+        if !on {
+            return match std::fs::remove_file(&path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(fail(e)),
+                _ => Ok(()),
+            };
+        }
+        let exe = super::exe()?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(fail)?;
+        }
+        std::fs::write(&path, agent(&exe.to_string_lossy())).map_err(fail)
+    }
+
+    /// A launch agent that starts `exe` when the user logs in.
+    pub fn agent(exe: &str) -> String {
+        let exe = exe
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+             <plist version=\"1.0\">\n\
+             <dict>\n\
+             \t<key>Label</key>\n\
+             \t<string>com.timstersaudioworks.splitflapclock</string>\n\
+             \t<key>ProgramArguments</key>\n\
+             \t<array>\n\
+             \t\t<string>{exe}</string>\n\
+             \t</array>\n\
+             \t<key>RunAtLoad</key>\n\
+             \t<true/>\n\
+             </dict>\n\
+             </plist>\n"
+        )
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn the_agent_names_the_program() {
+            let a = super::agent("/Applications/A & B.app/Contents/MacOS/splitflap-clock");
+            assert!(a.contains(
+                "<string>/Applications/A &amp; B.app/Contents/MacOS/splitflap-clock</string>"
+            ));
+            assert!(a.contains("<key>RunAtLoad</key>"));
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod imp {
     use std::path::PathBuf;
 

@@ -1,0 +1,82 @@
+# A one-off Mac build, for testing: the clock as a Mac app, for both Apple
+# silicon and Intel Macs, as a download on the run's page (Actions, then
+# the run, then Artifacts). It isn't signed by Apple, so the first time it
+# needs opening by right-click, Open. It publishes nothing.
+
+name: Mac
+
+on:
+  push:
+    branches: [settings]
+  workflow_dispatch:
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+          components: clippy
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release --target aarch64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
+      - name: Make the app
+        run: |
+          app="dist/Split-Flap Clock.app"
+          mkdir -p "$app/Contents/MacOS"
+          lipo -create -output "$app/Contents/MacOS/splitflap-clock" \
+            target/aarch64-apple-darwin/release/splitflap-clock \
+            target/x86_64-apple-darwin/release/splitflap-clock
+          ver=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          cat > "$app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Split-Flap Clock</string>
+            <key>CFBundleDisplayName</key><string>Split-Flap Clock</string>
+            <key>CFBundleIdentifier</key><string>com.timstersaudioworks.splitflapclock</string>
+            <key>CFBundleExecutable</key><string>splitflap-clock</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>$ver</string>
+            <key>CFBundleVersion</key><string>$ver</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          # Signed for this Mac only ("ad hoc"), which Apple silicon needs
+          # to run it at all.
+          codesign --force --deep --sign - "$app"
+          cat > "dist/READ ME FIRST.txt" <<'README'
+          Split-Flap Clock for Mac (a test build)
+
+          1. Drag "Split-Flap Clock" into Applications.
+          2. The first time, right-click it and choose Open, then Open again.
+             It isn't signed by Apple, so a plain double-click is refused.
+             (On newer macOS: try to open it once, then go to System
+             Settings, Privacy & Security, and click Open Anyway.)
+          3. If macOS says it is damaged, open Terminal and run:
+               xattr -cr "/Applications/Split-Flap Clock.app"
+             then open it again.
+
+          Settings live in ~/Library/Application Support/splitflap-clock.
+          To show it on every desktop, right-click it in the Dock: Options,
+          Assign To, All Desktops.
+          README
+          plutil -lint "$app/Contents/Info.plist"
+          (cd dist && ditto -c -k --sequesterRsrc --keepParent "Split-Flap Clock.app" ../SplitFlap-Clock-mac.zip)
+          mkdir out && mv SplitFlap-Clock-mac.zip "dist/READ ME FIRST.txt" out/
+          file "$app/Contents/MacOS/splitflap-clock"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splitflap-clock-mac
+          path: out/*
+          retention-days: 30

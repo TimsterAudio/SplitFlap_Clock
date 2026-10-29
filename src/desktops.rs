@@ -3,10 +3,13 @@
 //! Neither egui nor winit can do this, so it is done to the native window:
 //! on X11 the window is made sticky, which every window manager that has
 //! workspaces honours (XWayland included). Windows shows tool windows on
-//! every virtual desktop; a tool window has no taskbar button.
+//! every virtual desktop; a tool window has no taskbar button. On macOS it
+//! is the Dock's to choose: Options, Assign To, All Desktops.
 
+#[cfg(not(target_os = "macos"))]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
+#[cfg(not(target_os = "macos"))]
 fn handle(frame: &eframe::Frame) -> Result<RawWindowHandle, String> {
     frame
         .window_handle()
@@ -49,7 +52,17 @@ pub fn apply(frame: &eframe::Frame, on: bool, changed: bool) -> Result<(), Strin
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub fn apply(_frame: &eframe::Frame, on: bool, changed: bool) -> Result<(), String> {
+    if changed && on {
+        return Err(
+            "On a Mac, right-click the clock in the Dock: Options, Assign To, All Desktops".into(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn apply(frame: &eframe::Frame, on: bool, changed: bool) -> Result<(), String> {
     use x11rb::connection::Connection;
     use x11rb::protocol::xproto::{AtomEnum, ClientMessageEvent, ConnectionExt, EventMask};
