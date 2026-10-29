@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::alarm::{self, Alarm};
 use crate::flap::{Drum, Flap, Look};
+use crate::lighting::{Failures, Lighting, Mood};
 use crate::rng::Rng;
 use crate::sky::{sky, Sky};
 use crate::sound::{Click, Sound};
@@ -271,6 +272,9 @@ pub struct Saved {
     /// look) to 1: lighter black cards with brighter pins, or on white
     /// cards a darker split and pins.
     pub card_brightness: f32,
+    /// Lamps above the board, and how often their bulbs fail.
+    pub lighting: Mood,
+    pub bulbs: Failures,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -351,6 +355,8 @@ impl Default for Saved {
             light_board: false,
             flip_speed: 1.0,
             card_brightness: 0.0,
+            lighting: Mood::Off,
+            bulbs: Failures::Sometimes,
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -672,6 +678,7 @@ pub struct ClockApp {
     /// ring it.
     armed: HashMap<u64, chrono::NaiveDateTime>,
     beer_open: bool,
+    lighting: Lighting,
     /// When to ring the chime again.
     next_chime: f64,
     /// The board size the window was last fitted to.
@@ -715,6 +722,7 @@ impl ClockApp {
             ringing: Vec::new(),
             armed: HashMap::new(),
             beer_open: false,
+            lighting: Lighting::new(Rng::seeded()),
             next_chime: 0.0,
             fitted: None,
             last_window: Vec2::ZERO,
@@ -1093,6 +1101,13 @@ impl ClockApp {
         let speed = self.saved.flip_speed.clamp(0.25, 4.0) as f64;
         let refresh = self.refresh_due(time) | std::mem::take(&mut self.refresh_now);
         let mut busy = false;
+        // The lamps above the board: one for every 230 units or so.
+        let mood = self.saved.lighting;
+        let shadow = mood.shadow();
+        if mood != Mood::Off {
+            let lamps = ((board.x / 230.0).round() as usize).max(2);
+            busy |= self.lighting.update(lamps, time, self.saved.bulbs);
+        }
         let mut y = PAD;
         let mut first_zone = true;
         // Where the buttons on the board are, to click.
@@ -1196,6 +1211,19 @@ impl ClockApp {
                         let r = Rect::from_min_size(u(x, y + h - size.y), *size * scale);
                         let font =
                             FontId::new(size.y * font * scale, FontFamily::Name("flap".into()));
+                        // Lit from above, each card throws a soft shadow down
+                        // onto the board behind it.
+                        if shadow > 0.0 {
+                            let h = r.height();
+                            painter.add(
+                                egui::epaint::RectShape::filled(
+                                    r.translate(vec2(0.0, h * 0.07)),
+                                    (h * 0.07) as u8,
+                                    Color32::from_black_alpha((shadow * 170.0) as u8),
+                                )
+                                .with_blur_width(h * 0.22),
+                            );
+                        }
                         flap.draw(&ctx, &painter, r, &font, &look);
                         for (range, act) in &line.actions {
                             if range.contains(&k) {
@@ -1247,6 +1275,8 @@ impl ClockApp {
         if response.double_clicked() {
             self.settings_open = true;
         }
+        // The lamps' light over everything.
+        self.lighting.draw(&painter, full, mood);
         // The buttons light up under the pointer, like a lit push-button.
         let pointer = ctx.input(|i| i.pointer.hover_pos());
         for (rect, _) in &buttons {
@@ -1455,6 +1485,30 @@ impl ClockApp {
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut s.light_board, false, "Black cards");
                     ui.radio_value(&mut s.light_board, true, "White cards");
+                });
+                ui.end_row();
+                ui.label("Lighting");
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("lighting")
+                        .selected_text(s.lighting.label())
+                        .show_ui(ui, |ui| {
+                            for m in Mood::ALL {
+                                ui.selectable_value(&mut s.lighting, m, m.label());
+                            }
+                        })
+                        .response
+                        .on_hover_text("Warm lamps above the board, the cards standing out in their light");
+                    ui.add_enabled_ui(s.lighting != Mood::Off, |ui| {
+                        egui::ComboBox::from_id_salt("bulbs")
+                            .selected_text(s.bulbs.label())
+                            .show_ui(ui, |ui| {
+                                for f in Failures::ALL {
+                                    ui.selectable_value(&mut s.bulbs, f, f.label());
+                                }
+                            })
+                            .response
+                            .on_hover_text("Now and then a bulb flickers, and may go out for a while");
+                    });
                 });
                 ui.end_row();
                 ui.label("Card brightness");

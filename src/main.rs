@@ -7,6 +7,7 @@ mod autostart;
 mod desktops;
 mod flap;
 mod icon;
+mod lighting;
 mod places;
 mod rng;
 mod sky;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Lighting**, in Settings: the board lit by a row of warm incandescent lamps along its top, each casting a soft pool of light that fades down the board, with the cards' shadows falling below them. **Soft**, **Warm** or **Evening** (dimmer and more amber, with deeper shadows), or **Off** for the usual flat board. **Bulbs**: now and then a bulb flickers, and sometimes it dies, leaving its part of the board dark for a while until it's replaced (and sputters back on). Never, Sometimes or Often.
+
 - **Card brightness**, in Settings: lighter cards with brighter pins, so the split and the edges show up better against the board (on white cards, a darker split and pins). **Classic** goes back to the usual look.
 
 - The user guide covers everything in 1.1: day and night (a new Gate 09), alarm reasons, lit days and dates, the SNOOZE and STOP cards, white cards, light or dark menus, flip speed, the version line and beer money.
