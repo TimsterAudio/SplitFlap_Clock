@@ -267,6 +267,10 @@ pub struct Saved {
     /// How fast the flaps fall, 1 being the usual: from a quarter as fast
     /// to four times as fast.
     pub flip_speed: f32,
+    /// How much the cards stand out from the board, from 0 (the classic
+    /// look) to 1: lighter black cards with brighter pins, or on white
+    /// cards a darker split and pins.
+    pub card_brightness: f32,
     /// Their own colours for the main time and the date, or the board's.
     pub time_colour: Option<[u8; 3]>,
     pub date_colour: Option<[u8; 3]>,
@@ -346,6 +350,7 @@ impl Default for Saved {
             menus: Theme::System,
             light_board: false,
             flip_speed: 1.0,
+            card_brightness: 0.0,
             time_colour: None,
             date_colour: None,
             region_order: Vec::new(),
@@ -866,20 +871,27 @@ impl ClockApp {
     }
 
     fn look(&self) -> Look {
+        // Card brightness moves each colour from the classic look towards a
+        // brighter one; the split keeps its contrast, so the detail shows.
+        let k = self.saved.card_brightness.clamp(0.0, 1.0);
+        let mix = |a: [u8; 3], b: [u8; 3]| {
+            let m = |i: usize| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * k).round() as u8;
+            Color32::from_rgb(m(0), m(1), m(2))
+        };
         if self.saved.light_board {
             Look {
                 top: Color32::from_rgb(244, 242, 236),
                 bottom: Color32::from_rgb(232, 229, 221),
-                split: Color32::from_rgb(150, 147, 140),
-                hinge: Color32::from_rgb(178, 174, 166),
+                split: mix([150, 147, 140], [88, 86, 80]),
+                hinge: mix([178, 174, 166], [112, 109, 102]),
                 ink: self.ink(),
             }
         } else {
             Look {
-                top: Color32::from_rgb(36, 36, 35),
-                bottom: Color32::from_rgb(29, 29, 28),
+                top: mix([36, 36, 35], [92, 92, 89]),
+                bottom: mix([29, 29, 28], [76, 76, 73]),
                 split: Color32::from_rgb(4, 4, 4),
-                hinge: Color32::from_rgb(70, 70, 68),
+                hinge: mix([70, 70, 68], [176, 176, 170]),
                 ink: self.ink(),
             }
         }
@@ -1443,6 +1455,21 @@ impl ClockApp {
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut s.light_board, false, "Black cards");
                     ui.radio_value(&mut s.light_board, true, "White cards");
+                });
+                ui.end_row();
+                ui.label("Card brightness");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut s.card_brightness, 0.0..=1.0)
+                            .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
+                    )
+                    .on_hover_text("Lighter cards with brighter pins, so the split and the edges show up better against the board");
+                    if ui
+                        .add_enabled(s.card_brightness != 0.0, egui::Button::new("Classic").small())
+                        .clicked()
+                    {
+                        s.card_brightness = 0.0;
+                    }
                 });
                 ui.end_row();
                 ui.label("Menus");

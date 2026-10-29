@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Card brightness**, in Settings: lighter cards with brighter pins, so the split and the edges show up better against the board (on white cards, a darker split and pins). **Classic** goes back to the usual look.
+
 - The user guide covers everything in 1.1: day and night (a new Gate 09), alarm reasons, lit days and dates, the SNOOZE and STOP cards, white cards, light or dark menus, flip speed, the version line and beer money.
 
 - **Flip speed**, in Settings: how fast the flaps fall, from a quarter as fast (a stately board) to four times as fast (a frantic one), with **Normal** to go back. It sets everything: each flap's fall, the spin through the alphabet, and the ripple at start-up and on refreshes.
