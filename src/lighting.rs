@@ -27,17 +27,6 @@ pub enum Mood {
 }
 
 impl Mood {
-    pub const ALL: [Mood; 4] = [Mood::Off, Mood::Soft, Mood::Warm, Mood::Evening];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Mood::Off => "Off",
-            Mood::Soft => "Soft lamps",
-            Mood::Warm => "Warm lamps",
-            Mood::Evening => "Late evening",
-        }
-    }
-
     /// How the mood lights the board.
     fn look(self) -> Option<MoodLook> {
         let warm = [1.0, 0.72, 0.42];
@@ -83,17 +72,6 @@ pub enum Replace {
     Automatically,
     /// It stays out, even when the clock is restarted, until it's clicked.
     ByHand,
-}
-
-impl Replace {
-    pub const ALL: [Replace; 2] = [Replace::Automatically, Replace::ByHand];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Replace::Automatically => "Replaced for you",
-            Replace::ByHand => "Replace by hand",
-        }
-    }
 }
 
 /// How often bulbs fail.
@@ -412,7 +390,7 @@ fn additive(tint: [f32; 3], amount: f32) -> Color32 {
 }
 
 /// A soft oval glow, `colour` at its centre fading to nothing at its edge.
-fn halo(centre: Pos2, rx: f32, ry: f32, colour: Color32) -> Mesh {
+pub fn halo(centre: Pos2, rx: f32, ry: f32, colour: Color32) -> Mesh {
     let mut m = Mesh::default();
     m.colored_vertex(centre, colour);
     const N: u32 = 32;

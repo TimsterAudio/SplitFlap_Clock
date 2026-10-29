@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A new Settings window**, easier to read and find your way around. Pages down the side: **Clock**, **Places** and **Alarms** for the basics, **Effects** for the show, and **Window and About**. A live preview of the board along the top shows each change as you make it, including the place or alarm you're changing. Every setting says what it does, with switches and buttons instead of tick boxes.
+- **Moods** on the Effects page: **Classic**, **Terminal 1975**, **Last flight out** and **Quiet library** each set the lamps, sound, refresh, flip speed and cards in one go, to fine-tune from there.
+- **Places**: drag a place by its handle to move it, into another region too, or drag a region's heading to move the whole group. Click a place to change its name, region, colour or time.
+- **Alarms**: each on one line with its time, days and colour; click one to change it.
+
 - Each release carries `beer-money.txt` too: the other Timster's Audio Works apps, and how to shout the developer a beer.
 
 ## 1.1.0 – 2026-10-29
