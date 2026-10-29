@@ -139,7 +139,7 @@ impl Scene {
             },
             Scene::LastFlight => SceneLook {
                 lighting: Mood::Evening,
-                bulbs: Failures::Often,
+                bulbs: Failures::Hourly,
                 replace: Replace::ByHand,
                 flip_speed: 0.7,
                 refresh: Refresh::Random,
@@ -678,7 +678,7 @@ impl ClockApp {
             }
             y += h + gap;
         }
-        self.lighting.draw(&painter, rect, mood);
+        self.lighting.draw(&painter, rect, mood, time);
         painter.text(
             rect.right_bottom() - vec2(10.0, 6.0),
             egui::Align2::RIGHT_BOTTOM,
@@ -1184,6 +1184,7 @@ impl ClockApp {
     }
 
     fn effects_page(&mut self, ui: &mut Ui) {
+        let mut blow = false;
         let s = &mut self.saved;
         let current = Scene::of(s);
         let accent = accent(ui);
@@ -1358,7 +1359,7 @@ impl ClockApp {
                 row(
                     ui,
                     "Bulbs",
-                    "Now and then one flickers, and may go out",
+                    "Now and then one flickers, and may blow",
                     |ui| {
                         egui::ComboBox::from_id_salt("bulbs")
                             .selected_text(s.bulbs.label())
@@ -1368,6 +1369,16 @@ impl ClockApp {
                                     ui.selectable_value(&mut s.bulbs, f, f.label());
                                 }
                             });
+                        if ui
+                            .add_enabled(
+                                s.bulbs != Failures::Never,
+                                egui::Button::new("Blow one now"),
+                            )
+                            .on_hover_text("For anyone who can't wait: a bulb flickers, then blows")
+                            .clicked()
+                        {
+                            blow = true;
+                        }
                     },
                 );
                 divider(ui);
@@ -1388,6 +1399,10 @@ impl ClockApp {
                 );
             });
         });
+        if blow {
+            self.lighting.blow(ui.input(|i| i.time));
+            ui.ctx().request_repaint();
+        }
         card(ui, "CARDS AND SKY", |ui| {
             row(
                 ui,

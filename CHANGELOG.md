@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Bulbs blow properly now**: a white-hot flash and a pop (with the clatter sound on), a wisp of smoke that spreads under the top of the board and clears, and the bulb's glass falling to the foot of the board, where it lies, glinting, until the bulb is replaced. Replacing it sweeps up the glass.
+- Bulbs can **Fail about every hour**, and **Blow one now**, on the Effects page, sets one off straight away. **Last flight out** now fails bulbs every hour or so.
+
 - **A new Settings window**, easier to read and find your way around. Pages down the side: **Clock**, **Places** and **Alarms** for the basics, **Effects** for the show, and **Window and About**. A live preview of the board along the top shows each change as you make it, including the place or alarm you're changing. Every setting says what it does, with switches and buttons instead of tick boxes.
 - **Moods** on the Effects page: **Classic**, **Terminal 1975**, **Last flight out** and **Quiet library** each set the lamps, sound, refresh, flip speed and cards in one go, to fine-tune from there.
 - **Places**: drag a place by its handle to move it, into another region too, or drag a region's heading to move the whole group. Click a place to change its name, region, colour or time.

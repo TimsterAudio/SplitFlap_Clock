@@ -7,6 +7,9 @@
 //! pitch, loudness and timing, and bigger cards sound lower and louder, so
 //! a whole board spinning sounds like a real one.
 //!
+//! A bulb that blows pops: a sharp crack with a thump, then the tinkle of
+//! its glass landing a moment later.
+//!
 //! The alarm's chime is the airport kind: two soft bell notes, high then
 //! low, "bing-bong", made the same way from a few sine partials.
 //!
@@ -38,6 +41,8 @@ pub enum Event {
     Click(Click),
     /// The alarm chime, at its own volume from 0 to 1.
     Chime(f32),
+    /// A bulb blowing, from -1 (left of the board) to 1 (right).
+    Pop(f32),
 }
 
 const VOICES: usize = 64;
@@ -184,18 +189,67 @@ impl Clatter {
             knock_step: std::f32::consts::TAU * 240.0 * tone / rate,
             knock_decay: (-1.0 / (0.012 * rate)).exp(),
         };
-        // Take a free voice, or the oldest one.
-        let slot = (0..VOICES)
-            .find(|&i| !self.voices[i].live)
-            .unwrap_or_else(|| (0..VOICES).max_by_key(|&i| self.voices[i].age).unwrap_or(0));
-        self.voices[slot] = v;
+        self.take_voice(v);
     }
 
     pub fn play(&mut self, e: Event) {
         match e {
             Event::Click(c) => self.trigger(c),
             Event::Chime(gain) => self.chime(gain),
+            Event::Pop(pan) => self.pop(pan),
         }
+    }
+
+    /// A bulb blowing at `pan`: the crack of the glass and a dull thump,
+    /// then its pieces tinkling down a moment later.
+    pub fn pop(&mut self, pan: f32) {
+        let rate = self.rate;
+        let angle = (pan.clamp(-1.0, 1.0) * 0.7 + 1.0) * std::f32::consts::FRAC_PI_4;
+        let crack = Voice {
+            live: true,
+            wait: 0,
+            age: 0,
+            left: 2.4 * angle.cos(),
+            right: 2.4 * angle.sin(),
+            strike: 1.0,
+            strike_decay: (-1.0 / (0.0025 * rate)).exp(),
+            ring: Resonator::new(3100.0, 1400.0, rate),
+            body: Resonator::new(850.0, 500.0, rate),
+            knock: 0.45,
+            knock_phase: 0.0,
+            knock_step: std::f32::consts::TAU * 110.0 / rate,
+            knock_decay: (-1.0 / (0.02 * rate)).exp(),
+        };
+        self.take_voice(crack);
+        // The glass landing, piece by piece, high and ringing.
+        for k in 0..7 {
+            let wait = 0.42 + k as f32 * 0.045 + self.rand(0.0, 0.12);
+            let gain = self.rand(0.18, 0.45);
+            let tink = Voice {
+                live: true,
+                wait: (wait * rate) as u32,
+                age: 0,
+                left: gain * angle.cos(),
+                right: gain * angle.sin(),
+                strike: 1.0,
+                strike_decay: (-1.0 / (0.0004 * rate)).exp(),
+                ring: Resonator::new(self.rand(6200.0, 9800.0), 180.0, rate),
+                body: Resonator::new(self.rand(2800.0, 4200.0), 260.0, rate),
+                knock: 0.0,
+                knock_phase: 0.0,
+                knock_step: 0.0,
+                knock_decay: 0.0,
+            };
+            self.take_voice(tink);
+        }
+    }
+
+    /// Takes a free voice for `v`, or the oldest one.
+    fn take_voice(&mut self, v: Voice) {
+        let slot = (0..VOICES)
+            .find(|&i| !self.voices[i].live)
+            .unwrap_or_else(|| (0..VOICES).max_by_key(|&i| self.voices[i].age).unwrap_or(0));
+        self.voices[slot] = v;
     }
 
     /// Starts the two notes of the alarm chime.
@@ -302,6 +356,11 @@ impl Sound {
     pub fn click(&mut self, c: Click) {
         // A full queue just drops the click; there are plenty more.
         let _ = self.events.push(Event::Click(c));
+    }
+
+    /// A bulb blowing, at `pan` from -1 (left) to 1 (right).
+    pub fn pop(&mut self, pan: f32) {
+        let _ = self.events.push(Event::Pop(pan));
     }
 
     /// Rings the alarm chime once, at `volume` from 0 to 1.
@@ -422,6 +481,43 @@ mod tests {
         assert!(peak(0.5, 0.6) > peak(0.4, 0.5));
         assert!(peak(4.5, 5.0) == 0.0);
         assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+    }
+
+    #[test]
+    fn a_bulb_pops_then_its_glass_tinkles() {
+        let rate = 48_000.0;
+        let mut c = Clatter::new(rate, Rng::with_seed(9));
+        c.pop(0.5);
+        let mut out = vec![0.0; 2 * 48_000];
+        c.render(&mut out, 1.0);
+        let peak = |a: f32, b: f32| {
+            out[(a * rate) as usize * 2..(b * rate) as usize * 2]
+                .iter()
+                .fold(0.0f32, |m, x| m.max(x.abs()))
+        };
+        // The crack, a quiet moment, the glass landing, then silence.
+        assert!(peak(0.0, 0.05) > 0.2);
+        assert!(peak(0.2, 0.4) < 0.01);
+        assert!(peak(0.4, 0.75) > 0.02);
+        assert!(peak(0.9, 1.0) == 0.0);
+        assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
+        // To the right of the board, louder on the right.
+        let (l, r) = out.chunks(2).fold((0.0f32, 0.0f32), |(l, r), f| {
+            (l + f[0].abs(), r + f[1].abs())
+        });
+        assert!(r > l);
+    }
+
+    /// Renders a bulb blowing to the WAV file named by `POP_WAV`.
+    #[test]
+    #[ignore]
+    fn render_a_pop() {
+        let path = std::env::var("POP_WAV").expect("set POP_WAV to a path");
+        let mut c = Clatter::new(48_000.0, Rng::with_seed(9));
+        c.pop(0.0);
+        let mut out = vec![0.0; 2 * 48_000];
+        c.render(&mut out, 0.6);
+        write_wav(&path, &out);
     }
 
     /// A board like the default one starting up, with the chime rung at

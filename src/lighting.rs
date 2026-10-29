@@ -1,8 +1,10 @@
 //! The board's lighting: a row of incandescent lamps just above it, each
 //! throwing a warm pool of light down the board, brightest near the top and
-//! fading away below. Once in a while, days apart, a bulb flickers, then
-//! either comes good or dies, leaving its part of the board in shadow until
-//! it's replaced: after a while by itself, or by hand, by clicking it.
+//! fading away below. Once in a while, a bulb flickers, then either comes
+//! good or blows: a flash and a pop, a wisp of smoke, and its glass falling
+//! to the foot of the board, its part of the board in shadow until it's
+//! replaced: after a while by itself, or by hand, by clicking it, which
+//! sweeps up the glass too.
 //!
 //! The light is drawn over the finished board: a fine grid, darkened where
 //! the lamps don't reach and warmed where they do, so it falls on the cards,
@@ -81,16 +83,24 @@ pub enum Failures {
     #[default]
     Sometimes,
     Often,
+    /// For the impatient.
+    Hourly,
 }
 
 impl Failures {
-    pub const ALL: [Failures; 3] = [Failures::Never, Failures::Sometimes, Failures::Often];
+    pub const ALL: [Failures; 4] = [
+        Failures::Never,
+        Failures::Sometimes,
+        Failures::Often,
+        Failures::Hourly,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Failures::Never => "Never fail",
             Failures::Sometimes => "Fail every few days",
             Failures::Often => "Fail about once a day",
+            Failures::Hourly => "Fail about every hour",
         }
     }
 
@@ -102,6 +112,7 @@ impl Failures {
             Failures::Never => None,
             Failures::Sometimes => Some(4.0 * DAY),
             Failures::Often => Some(DAY),
+            Failures::Hourly => Some(3600.0),
         }
     }
 }
@@ -154,11 +165,65 @@ impl Lamp {
     }
 }
 
+/// A piece of a blown bulb's glass, falling to the foot of the board and
+/// lying there. Places and sizes are shares of the board's width and
+/// height, so it stays put when the window changes size.
+#[derive(Clone, Copy)]
+struct Shard {
+    /// Where it lands: across, from under its lamp, in lamp spacings; and
+    /// down, as a share of the board's height.
+    x: f32,
+    y: f32,
+    /// How far it drifts sideways on the way down, in lamp spacings.
+    drift: f32,
+    /// When it starts to fall, after the bulb blows.
+    delay: f32,
+    size: f32,
+    /// Its turn when it lands, and how much it spins as it falls.
+    angle: f32,
+    spin: f32,
+    /// Its corners, as angles and distances out from its middle.
+    corners: [(f32, f32); 4],
+    /// How bright it catches the light.
+    shine: f32,
+}
+
+/// A blown bulb's glass, under lamp `lamp`, from when it blew.
+struct Glass {
+    lamp: usize,
+    at: f64,
+    shards: Vec<Shard>,
+}
+
+/// A puff of a blown bulb's smoke.
+#[derive(Clone, Copy)]
+struct Puff {
+    born: f64,
+    life: f32,
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    size: f32,
+    grow: f32,
+    thick: f32,
+}
+
+/// How long a shard takes to fall the height of the board, in seconds.
+const FALL: f32 = 0.6;
+
 pub struct Lighting {
     lamps: Vec<Lamp>,
     rng: Rng,
     /// When the lamps were last moved on.
     last: Option<f64>,
+    glass: Vec<Glass>,
+    smoke: Vec<Puff>,
+    /// Bulbs that have blown since [`Lighting::take_pops`] was last asked,
+    /// for the sound.
+    pops: Vec<usize>,
+    /// When each bulb blew, for its flash.
+    flashes: Vec<(usize, f64)>,
 }
 
 impl Lighting {
@@ -167,6 +232,10 @@ impl Lighting {
             lamps: Vec::new(),
             rng,
             last: None,
+            glass: Vec::new(),
+            smoke: Vec::new(),
+            pops: Vec::new(),
+            flashes: Vec::new(),
         }
     }
 
@@ -213,6 +282,9 @@ impl Lighting {
                                 until: f64::INFINITY,
                             };
                             lamp.target = 0.0;
+                            // A flash, then it blows.
+                            lamp.power = 1.0;
+                            self.blow_up(i, n, time);
                         } else {
                             lamp.state = State::Lit;
                             lamp.target = 1.0;
@@ -241,7 +313,9 @@ impl Lighting {
                             until: f64::INFINITY,
                         };
                     } else if time >= until {
-                        // A new bulb, which sputters for a moment on.
+                        // A new bulb, which sputters for a moment on, and
+                        // the glass swept up.
+                        self.glass.retain(|g| g.lamp != i);
                         let until = time + self.rng.between(0.3, 1.2);
                         lamp.state = State::Flicker {
                             until,
@@ -259,7 +333,92 @@ impl Lighting {
             }
             self.lamps[i] = lamp;
         }
+        // Smoke drifts and clears; glass falls.
+        self.smoke.retain(|p| time - p.born < p.life as f64);
+        self.flashes.retain(|(_, at)| time - at < 0.5);
+        self.glass.retain(|g| g.lamp < n);
+        busy |= !self.smoke.is_empty()
+            || !self.flashes.is_empty()
+            || self.glass.iter().any(|g| time - g.at < (FALL + 0.3) as f64);
         busy
+    }
+
+    /// Makes a bulb that's lit blow, after a moment's flickering: the one at
+    /// random, for anyone who can't wait.
+    pub fn blow(&mut self, time: f64) -> bool {
+        let lit: Vec<usize> = (0..self.lamps.len())
+            .filter(|&i| self.lamps[i].state == State::Lit)
+            .collect();
+        if lit.is_empty() {
+            return false;
+        }
+        let pick = lit[(self.rng.between(0.0, lit.len() as f64) as usize).min(lit.len() - 1)];
+        self.lamps[pick].state = State::Flicker {
+            until: time + self.rng.between(1.2, 2.2),
+            next: time,
+            dies: true,
+        };
+        true
+    }
+
+    /// The bulbs that have blown since this was last asked, by their place
+    /// from the left, and how many lamps there are.
+    pub fn take_pops(&mut self) -> (Vec<usize>, usize) {
+        (std::mem::take(&mut self.pops), self.lamps.len())
+    }
+
+    /// Bulb `i` of `n` blows at `time`: its glass falls and its smoke rises.
+    fn blow_up(&mut self, i: usize, n: usize, time: f64) {
+        self.pops.push(i);
+        self.flashes.push((i, time));
+        let x = (i as f32 + 0.5) / n.max(1) as f32;
+        let mut r = |lo: f32, hi: f32| self.rng.between(lo as f64, hi as f64) as f32;
+        let count = r(9.0, 15.0) as usize;
+        let mut shards = Vec::with_capacity(count);
+        for _ in 0..count {
+            let size = r(0.009, 0.022);
+            // Four corners, roughly a quarter turn apart, so it's a convex
+            // sliver of some shape or other.
+            let mut corners = [(0.0, 0.0); 4];
+            let start = r(0.0, 6.3);
+            for (k, c) in corners.iter_mut().enumerate() {
+                let a = start + k as f32 * std::f32::consts::FRAC_PI_2 + r(-0.45, 0.45);
+                *c = (a, r(0.35, 1.0));
+            }
+            shards.push(Shard {
+                x: r(-0.32, 0.32),
+                y: 1.0 - r(0.006, 0.03),
+                drift: r(-0.08, 0.08),
+                delay: r(0.0, 0.12),
+                size,
+                angle: r(0.0, 6.3),
+                spin: r(-9.0, 9.0),
+                corners,
+                shine: r(0.5, 1.0),
+            });
+        }
+        // Glass from an earlier bulb there has been swept up already.
+        self.glass.retain(|g| g.lamp != i);
+        self.glass.push(Glass {
+            lamp: i,
+            at: time,
+            shards,
+        });
+        let mut r = |lo: f32, hi: f32| self.rng.between(lo as f64, hi as f64) as f32;
+        for k in 0..24 {
+            let puff = Puff {
+                born: time + k as f64 * 0.1 + r(0.0, 0.1) as f64,
+                life: r(4.0, 7.5),
+                x: x + r(-0.012, 0.012),
+                y: r(0.02, 0.06),
+                vx: r(-0.028, 0.028),
+                vy: r(-0.015, 0.022),
+                size: r(0.02, 0.04),
+                grow: r(0.025, 0.05),
+                thick: r(0.45, 0.8),
+            };
+            self.smoke.push(puff);
+        }
     }
 
     /// The bulbs that are out, by their place from the left.
@@ -275,6 +434,11 @@ impl Lighting {
             if i >= self.lamps.len() {
                 self.lamps.resize(i + 1, Lamp::new());
             }
+            // Its glass, still lying where it fell, long since quiet.
+            self.blow_up(i, 1, f64::NEG_INFINITY);
+            self.pops.clear();
+            self.flashes.clear();
+            self.smoke.clear();
             self.lamps[i] = Lamp {
                 state: State::Dead {
                     until: f64::INFINITY,
@@ -290,6 +454,7 @@ impl Lighting {
     pub fn replace(&mut self, i: usize, time: f64) -> bool {
         match self.lamps.get_mut(i) {
             Some(lamp) if matches!(lamp.state, State::Dead { .. }) => {
+                self.glass.retain(|g| g.lamp != i);
                 lamp.state = State::Flicker {
                     until: time + self.rng.between(0.3, 1.2),
                     next: time,
@@ -332,8 +497,9 @@ impl Lighting {
         ((look.ambient + look.lamp * pool).min(1.0), look.glow * pool)
     }
 
-    /// Lights the board at `rect`, drawn already, in `mood`.
-    pub fn draw(&self, painter: &Painter, rect: Rect, mood: Mood) {
+    /// Lights the board at `rect`, drawn already, in `mood`, at `time`:
+    /// and any bulb that has blown, its flash, smoke and glass.
+    pub fn draw(&self, painter: &Painter, rect: Rect, mood: Mood, time: f64) {
         let Some(look) = mood.look() else {
             return;
         };
@@ -378,6 +544,87 @@ impl Lighting {
                 ry,
                 additive(look.tint, 0.55 * lamp.power),
             ));
+        }
+        let at = |x: f32, y: f32| {
+            pos2(
+                rect.min.x + rect.width() * x,
+                rect.min.y + rect.height() * y,
+            )
+        };
+        // A blowing bulb's last flash, white hot.
+        for &(i, when) in &self.flashes {
+            let k = (1.0 - (time - when) as f32 / 0.35).max(0.0);
+            if k > 0.0 {
+                painter.add(halo(
+                    at((i as f32 + 0.5) / n, 0.0),
+                    rect.width() / n * 0.9,
+                    rect.height() * 0.4,
+                    additive([1.0, 0.95, 0.85], k * k),
+                ));
+            }
+        }
+        // Its smoke, spreading under the top of the board and clearing.
+        for p in &self.smoke {
+            let age = (time - p.born) as f32;
+            if age < 0.0 {
+                continue;
+            }
+            let fade = (1.0 - age / p.life).max(0.0);
+            let alpha = p.thick * (age / 0.4).min(1.0) * fade.powf(1.5) * 0.75;
+            let radius = (p.size + p.grow * age) * rect.height();
+            let y = (p.y + p.vy * age).max(0.01);
+            painter.add(halo(
+                at(p.x + p.vx * age, y),
+                radius * 1.4,
+                radius,
+                Color32::from_rgba_unmultiplied(168, 162, 154, (alpha * 255.0) as u8),
+            ));
+        }
+        // Its glass, falling to the foot of the board and lying there,
+        // catching what light there is.
+        for g in &self.glass {
+            let centre = (g.lamp as f32 + 0.5) / n;
+            for sh in &g.shards {
+                let t = (time - g.at) as f32 - sh.delay;
+                if t < 0.0 {
+                    continue;
+                }
+                let s = (t / FALL).min(1.0);
+                let x = centre + (sh.x * (0.3 + 0.7 * s) + sh.drift * s) / n;
+                let top = 0.03;
+                let y = top + (sh.y - top) * s * s;
+                let angle = sh.angle + sh.spin * (1.0 - s);
+                let size = sh.size * rect.height();
+                let middle = at(x, y);
+                let points: Vec<Pos2> = sh
+                    .corners
+                    .iter()
+                    .map(|&(a, d)| {
+                        let a = a + angle;
+                        middle + egui::vec2(a.cos(), a.sin() * 0.6) * d * size
+                    })
+                    .collect();
+                let lit = self.light(&look, x, y).0 * sh.shine;
+                let fill =
+                    Color32::from_rgba_unmultiplied(196, 206, 212, (50.0 + 110.0 * lit) as u8);
+                let edge =
+                    Color32::from_rgba_unmultiplied(255, 248, 230, (70.0 + 170.0 * lit) as u8);
+                let glint = points[0];
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    fill,
+                    egui::Stroke::new(0.8, edge),
+                ));
+                // The odd piece catches the light at a corner.
+                if sh.shine > 0.8 {
+                    painter.add(halo(
+                        glint,
+                        size * 0.9,
+                        size * 0.9,
+                        additive([1.0, 0.96, 0.86], 0.25 + 0.6 * lit),
+                    ));
+                }
+            }
         }
     }
 }
@@ -484,6 +731,47 @@ mod tests {
         }
         assert!(again.dead().is_empty());
         assert!(again.lamps[2].power > 0.95);
+    }
+
+    #[test]
+    fn a_blown_bulb_pops_smokes_and_leaves_its_glass_until_replaced() {
+        let mut l = Lighting::new(Rng::with_seed(6));
+        l.update(3, 0.0, Failures::Sometimes, Replace::ByHand);
+        assert!(l.blow(0.0));
+        let mut t = 0.0;
+        while t < 3.0 {
+            l.update(3, t, Failures::Sometimes, Replace::ByHand);
+            t += 0.05;
+        }
+        let dead = l.dead();
+        assert_eq!(dead.len(), 1);
+        let (pops, n) = l.take_pops();
+        assert_eq!((pops, n), (dead.clone(), 3));
+        assert!(l.take_pops().0.is_empty());
+        assert_eq!(l.glass.len(), 1);
+        assert!(l.glass[0].shards.len() >= 7);
+        assert!(!l.smoke.is_empty());
+        // The smoke clears; the glass stays, and so does the dark.
+        while t < 20.0 {
+            l.update(3, t, Failures::Sometimes, Replace::ByHand);
+            t += 0.5;
+        }
+        assert!(l.smoke.is_empty());
+        assert_eq!(l.glass.len(), 1);
+        assert_eq!(l.dead(), dead);
+        // A new bulb sweeps the glass up.
+        assert!(l.replace(dead[0], t));
+        assert!(l.glass.is_empty());
+    }
+
+    #[test]
+    fn bulbs_out_after_a_restart_have_their_glass_but_make_no_fuss() {
+        let mut l = Lighting::new(Rng::with_seed(8));
+        l.restore(&[1]);
+        assert!(!l.update(3, 0.0, Failures::Sometimes, Replace::ByHand));
+        assert!(l.take_pops().0.is_empty());
+        assert!(l.smoke.is_empty());
+        assert_eq!(l.glass.len(), 1);
     }
 
     #[test]

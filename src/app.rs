@@ -1136,6 +1136,13 @@ impl ClockApp {
             busy |= self
                 .lighting
                 .update(lamps, time, self.saved.bulbs, self.saved.replace);
+            // A bulb that blows pops, if the sound is on.
+            let (pops, n) = self.lighting.take_pops();
+            if let (true, Some(sound)) = (self.saved.sound, &mut self.sound) {
+                for i in pops {
+                    sound.pop((i as f32 + 0.5) / n.max(1) as f32 * 2.0 - 1.0);
+                }
+            }
             if self.saved.replace == Replace::ByHand {
                 let dead = self.lighting.dead();
                 if dead != self.saved.dead_bulbs {
@@ -1313,7 +1320,7 @@ impl ClockApp {
             self.settings_open = true;
         }
         // The lamps' light over everything.
-        self.lighting.draw(&painter, full, mood);
+        self.lighting.draw(&painter, full, mood, time);
         // A dead bulb, to be replaced by hand: click it.
         let dead_lamp = if mood != Mood::Off && self.saved.replace == Replace::ByHand {
             ctx.input(|i| i.pointer.hover_pos())
