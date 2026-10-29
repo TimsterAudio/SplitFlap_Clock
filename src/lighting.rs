@@ -1,7 +1,8 @@
 //! The board's lighting: a row of incandescent lamps just above it, each
 //! throwing a warm pool of light down the board, brightest near the top and
-//! fading away below. Now and then a bulb flickers, then either comes good
-//! or dies, leaving its part of the board in shadow until it's replaced.
+//! fading away below. Once in a while, days apart, a bulb flickers, then
+//! either comes good or dies, leaving its part of the board in shadow until
+//! it's replaced.
 //!
 //! The light is drawn over the finished board: a fine grid, darkened where
 //! the lamps don't reach and warmed where they do, so it falls on the cards,
@@ -72,6 +73,8 @@ impl Mood {
     }
 }
 
+const DAY: f64 = 24.0 * 3600.0;
+
 /// How often bulbs fail.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
 pub enum Failures {
@@ -87,18 +90,19 @@ impl Failures {
     pub fn label(self) -> &'static str {
         match self {
             Failures::Never => "Never fail",
-            Failures::Sometimes => "Fail now and then",
-            Failures::Often => "Fail often",
+            Failures::Sometimes => "Fail every few days",
+            Failures::Often => "Fail about once a day",
         }
     }
 
-    /// The average seconds between a bulb starting to play up, anywhere on
-    /// the board.
+    /// The average seconds, while the clock is running, between a bulb
+    /// starting to play up, anywhere on the board. When is left to chance:
+    /// it could be minutes after the last, or a week.
     fn every(self) -> Option<f64> {
         match self {
             Failures::Never => None,
-            Failures::Sometimes => Some(240.0),
-            Failures::Often => Some(40.0),
+            Failures::Sometimes => Some(4.0 * DAY),
+            Failures::Often => Some(DAY),
         }
     }
 }
@@ -389,8 +393,8 @@ mod tests {
         let mut l = Lighting::new(Rng::with_seed(3));
         let mut starts = 0;
         let mut t = 0.0;
-        // An hour, with bulbs failing every 40 s or so.
-        while t < 3600.0 {
+        // Thirty days, with a bulb failing about once a day.
+        while t < 30.0 * DAY {
             let before: Vec<bool> = l.lamps.iter().map(|x| x.state == State::Lit).collect();
             l.update(4, t, Failures::Often);
             for (i, lamp) in l.lamps.iter().enumerate() {
@@ -398,8 +402,8 @@ mod tests {
                     starts += 1;
                 }
             }
-            t += 0.1;
+            t += 2.0;
         }
-        assert!((50..=130).contains(&starts), "{starts}");
+        assert!((15..=50).contains(&starts), "{starts}");
     }
 }

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Lighting**, in Settings: the board lit by a row of warm incandescent lamps along its top, each casting a soft pool of light that fades down the board, with the cards' shadows falling below them. **Soft**, **Warm** or **Evening** (dimmer and more amber, with deeper shadows), or **Off** for the usual flat board. **Bulbs**: now and then a bulb flickers, and sometimes it dies, leaving its part of the board dark for a while until it's replaced (and sputters back on). Never, Sometimes or Often.
+- **Lighting**, in Settings: the board lit by a row of warm incandescent lamps along its top, each casting a soft pool of light that fades down the board, with the cards' shadows falling below them. **Soft**, **Warm** or **Evening** (dimmer and more amber, with deeper shadows), or **Off** for the usual flat board. **Bulbs**: once in a while, at random and days apart, a bulb flickers, and sometimes it dies, leaving its part of the board dark for a while until it's replaced (and sputters back on). Every few days, about once a day, or never.
 
 - **Card brightness**, in Settings: lighter cards with brighter pins, so the split and the edges show up better against the board (on white cards, a darker split and pins). **Classic** goes back to the usual look.
 
