@@ -1986,8 +1986,9 @@ fn alarm_editor(
 
 /// Moves what was dragged: a place to before `before` (or the end of the
 /// region), taking on `region`; or a region to before `region`. Says which
-/// place now heads the rows that moved: the place, or the region's first,
-/// if anything moved at all.
+/// place is now in the first row that changed, from which the board
+/// refreshes, if anything moved at all: where it went, for a move up the
+/// list, and where it left, for a move down.
 fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) -> Option<u64> {
     let rows = |s: &Saved| -> Vec<(u64, String)> {
         grouped(s)
@@ -1996,7 +1997,7 @@ fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) ->
             .collect()
     };
     let was = rows(s);
-    let moved = match what {
+    match what {
         Drag::Place(id) => {
             let from = s.zones.iter().position(|z| z.id == id)?;
             let mut z = s.zones.remove(from);
@@ -2024,7 +2025,6 @@ fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) ->
                     .map_or(s.zones.len(), |p| p + 1),
             };
             s.zones.insert(at, z);
-            id
         }
         Drag::Region(r) => {
             if r == region {
@@ -2039,10 +2039,11 @@ fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) ->
                 .unwrap_or(order.len());
             order.insert(to, moving);
             s.region_order = order;
-            s.zones.iter().find(|z| z.region_key() == r)?.id
         }
-    };
-    (rows(s) != was).then_some(moved)
+    }
+    let now = rows(s);
+    let first = now.iter().zip(&was).position(|(a, b)| a != b)?;
+    Some(now[first].0)
 }
 
 #[cfg(test)]
@@ -2071,11 +2072,17 @@ mod tests {
             ],
             ..Saved::default()
         };
-        // Paris before London: the board refreshes from Paris down.
+        // Paris up before London: the board refreshes from Paris down.
         assert_eq!(
             move_dropped(&mut s, Drag::Place(2), "EUROPE", Some(1)),
             Some(2)
         );
+        // And back down again: from where it left, London's row now.
+        assert_eq!(
+            move_dropped(&mut s, Drag::Place(2), "EUROPE", None),
+            Some(1)
+        );
+        move_dropped(&mut s, Drag::Place(2), "EUROPE", Some(1));
         assert_eq!(labels(&s), ["PARIS", "LONDON", "TOKYO"]);
         // Tokyo into Europe, at its end.
         assert_eq!(

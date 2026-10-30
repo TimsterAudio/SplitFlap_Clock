@@ -47,12 +47,15 @@ pub enum Event {
 }
 
 const VOICES: usize = 64;
-const TONES: usize = 8;
+const TONES: usize = 24;
 /// The chime's two notes, E5 then C5, and the time between them.
 const CHIME: [f32; 2] = [659.25, 523.25];
 const CHIME_GAP: f32 = 0.5;
 /// Each note's partials, as multiples of its pitch, and their levels.
 const PARTIALS: [(f32, f32); 3] = [(1.0, 1.0), (2.0, 0.18), (3.0, 0.06)];
+/// A piece of glass rings at a pitch and two higher partials that aren't
+/// harmonics of it, which is what makes it sound like glass.
+const GLASS: [(f32, f32); 3] = [(1.0, 1.0), (2.32, 0.45), (4.25, 0.2)];
 /// How long a click lasts, in seconds.
 const LIFE: f32 = 0.06;
 
@@ -89,6 +92,8 @@ struct Tone {
     decay: f32,
     steps: [f32; 3],
     phases: [f32; 3],
+    /// Each partial's level.
+    amps: [f32; 3],
     /// A slow, gentle wobble in level, as a struck bar has.
     wobble: f32,
     wobble_step: f32,
@@ -102,8 +107,8 @@ impl Tone {
         }
         let rise = (self.age as f32 / self.attack.max(1) as f32).min(1.0);
         let mut s = 0.0;
-        for (k, (_, amp)) in PARTIALS.iter().enumerate() {
-            s += amp * self.phases[k].sin();
+        for k in 0..3 {
+            s += self.amps[k] * self.phases[k].sin();
             self.phases[k] = (self.phases[k] + self.steps[k]) % std::f32::consts::TAU;
         }
         let wobble = 1.0 + 0.08 * self.wobble.sin();
@@ -248,7 +253,33 @@ impl Clatter {
                 own: true,
             };
             self.take_voice(tink);
+            // And the piece rings, bright and brief, as glass does.
+            let freq = self.rand(2600.0, 5200.0);
+            let ring = Tone {
+                live: true,
+                wait: (wait * rate) as u32,
+                age: 0,
+                life: (0.6 * rate) as u32,
+                attack: (0.0008 * rate) as u32,
+                level: gain * 0.22,
+                env: 1.0,
+                decay: (-1.0 / (self.rand(0.09, 0.2) * rate)).exp(),
+                steps: GLASS.map(|(m, _)| std::f32::consts::TAU * freq * m / rate),
+                phases: [0.0; 3],
+                amps: GLASS.map(|(_, a)| a),
+                wobble: 0.0,
+                wobble_step: 0.0,
+            };
+            self.take_tone(ring);
         }
+    }
+
+    /// Takes a free tone for `t`, or the oldest one.
+    fn take_tone(&mut self, t: Tone) {
+        let slot = (0..TONES)
+            .find(|&i| !self.tones[i].live)
+            .unwrap_or_else(|| (0..TONES).max_by_key(|&i| self.tones[i].age).unwrap_or(0));
+        self.tones[slot] = t;
     }
 
     /// Takes a free voice for `v`, or the oldest one.
@@ -274,13 +305,11 @@ impl Clatter {
                 decay: (-1.0 / (1.1 * rate)).exp(),
                 steps: PARTIALS.map(|(m, _)| std::f32::consts::TAU * freq * m / rate),
                 phases: [0.0; 3],
+                amps: PARTIALS.map(|(_, a)| a),
                 wobble: 0.0,
                 wobble_step: std::f32::consts::TAU * 4.5 / rate,
             };
-            let slot = (0..TONES)
-                .find(|&i| !self.tones[i].live)
-                .unwrap_or_else(|| (0..TONES).max_by_key(|&i| self.tones[i].age).unwrap_or(0));
-            self.tones[slot] = tone;
+            self.take_tone(tone);
         }
     }
 
@@ -502,18 +531,20 @@ mod tests {
         let rate = 48_000.0;
         let mut c = Clatter::new(rate, Rng::with_seed(9));
         c.pop(0.5, 0.5);
-        let mut out = vec![0.0; 2 * 48_000];
+        let mut out = vec![0.0; 2 * 2 * 48_000];
         c.render(&mut out, 1.0);
         let peak = |a: f32, b: f32| {
             out[(a * rate) as usize * 2..(b * rate) as usize * 2]
                 .iter()
                 .fold(0.0f32, |m, x| m.max(x.abs()))
         };
-        // The crack, a quiet moment, the glass landing, then silence.
+        // The crack, a quiet moment, the glass landing and ringing on a
+        // while, then silence.
         assert!(peak(0.0, 0.05) > 0.2);
         assert!(peak(0.2, 0.4) < 0.01);
         assert!(peak(0.4, 0.75) > 0.02);
-        assert!(peak(0.9, 1.0) == 0.0);
+        assert!(peak(0.95, 1.05) > 0.0);
+        assert!(peak(1.9, 2.0) == 0.0);
         assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
         // To the right of the board, louder on the right.
         let (l, r) = out.chunks(2).fold((0.0f32, 0.0f32), |(l, r), f| {
@@ -529,7 +560,7 @@ mod tests {
         let path = std::env::var("POP_WAV").expect("set POP_WAV to a path");
         let mut c = Clatter::new(48_000.0, Rng::with_seed(9));
         c.pop(0.0, 0.5);
-        let mut out = vec![0.0; 2 * 48_000];
+        let mut out = vec![0.0; 2 * 2 * 48_000];
         c.render(&mut out, 0.6);
         write_wav(&path, &out);
     }
