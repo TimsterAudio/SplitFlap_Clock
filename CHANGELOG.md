@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now sets its size again just after, so Windows tells it how big it really is.
+
 ## 1.2.0 – 2026-10-30
 
 - **A new Settings window**, easier to read and to find your way around. Pages down the side: **Clock**, **Places** and **Alarms** for the basics, **Effects** for the show, and **Window and About**. A live preview of the board along the top shows each change as you make it, including the place or alarm you're changing. Every setting says what it does, with switches and buttons instead of tick boxes.

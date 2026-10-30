@@ -674,6 +674,9 @@ pub struct ClockApp {
     /// The window state last asked of the system.
     applied_on_top: Option<bool>,
     applied_frameless: Option<bool>,
+    /// When to set the window's size again, after the title bar came or
+    /// went.
+    refit_at: Option<f64>,
     applied_all_desktops: bool,
     desktops_error: Option<String>,
     /// Whether the clock starts at login, as the system has it.
@@ -742,6 +745,7 @@ impl ClockApp {
             picked: None,
             applied_on_top: None,
             applied_frameless: None,
+            refit_at: None,
             applied_all_desktops: false,
             desktops_error: None,
             autostart: autostart::enabled(),
@@ -994,14 +998,29 @@ impl ClockApp {
             }));
         }
         if self.applied_frameless != Some(self.saved.frameless) {
+            let toggled = self.applied_frameless.is_some();
             self.applied_frameless = Some(self.saved.frameless);
             ctx.send_viewport_cmd(ViewportCommand::Decorations(!self.saved.frameless));
+            if toggled {
+                // Windows keeps the window's outer size as the title bar
+                // comes or goes, so the inside changes size, and it doesn't
+                // always say so: the board would be drawn at its old size,
+                // and the pointer read as if it were still under the title
+                // bar. Setting the size again, now and in a moment, makes it
+                // tell.
+                self.fitted = None;
+                self.refit_at = Some(ctx.input(|i| i.time) + 0.3);
+            }
         }
     }
 
     /// Fits the window to the board when the board changes shape, and
     /// remembers the size the user drags it to.
     fn fit_window(&mut self, ctx: &egui::Context, board: Vec2, window: Vec2, time: f64) {
+        if self.refit_at.is_some_and(|at| time >= at) {
+            self.refit_at = None;
+            self.fitted = None;
+        }
         if self.fitted != Some(board) {
             self.fitted = Some(board);
             self.resize(ctx, board, time);
