@@ -195,18 +195,24 @@ struct Glass {
     shards: Vec<Shard>,
 }
 
-/// A puff of a blown bulb's smoke.
+/// A puff of a blown bulb's smoke, carried off sideways by the draught.
 #[derive(Clone, Copy)]
 struct Puff {
     born: f64,
     life: f32,
     x: f32,
     y: f32,
+    /// How fast it sets off, and how hard the draught pushes it on, across
+    /// the board, a share of its width a second (and a second squared).
     vx: f32,
+    wind: f32,
+    /// How fast it rises (or, caught in an eddy, sinks).
     vy: f32,
     size: f32,
     grow: f32,
     thick: f32,
+    /// Where it is in its curl, so puffs don't wave together.
+    phase: f32,
 }
 
 /// How long a shard takes to fall the height of the board, in seconds.
@@ -405,17 +411,25 @@ impl Lighting {
             shards,
         });
         let mut r = |lo: f32, hi: f32| self.rng.between(lo as f64, hi as f64) as f32;
-        for k in 0..24 {
+        // The draught takes the smoke one way or the other, a thin trail
+        // that thins as it goes: mostly across the board rather than off
+        // its edge.
+        let inward = if x < 0.5 { 1.0 } else { -1.0 };
+        let way = if r(0.0, 1.0) < 0.8 { inward } else { -inward };
+        let draught = r(0.6, 1.4);
+        for k in 0..20 {
             let puff = Puff {
-                born: time + k as f64 * 0.1 + r(0.0, 0.1) as f64,
-                life: r(4.0, 7.5),
-                x: x + r(-0.012, 0.012),
-                y: r(0.02, 0.06),
-                vx: r(-0.028, 0.028),
-                vy: r(-0.015, 0.022),
-                size: r(0.02, 0.04),
-                grow: r(0.025, 0.05),
-                thick: r(0.45, 0.8),
+                born: time + k as f64 * 0.14 + r(0.0, 0.1) as f64,
+                life: r(3.8, 6.0),
+                x: x + r(-0.006, 0.006),
+                y: r(0.03, 0.07),
+                vx: way * draught * r(0.012, 0.03),
+                wind: way * draught * r(0.006, 0.016),
+                vy: r(-0.012, 0.01),
+                size: r(0.01, 0.018),
+                grow: r(0.015, 0.03),
+                thick: r(0.35, 0.6),
+                phase: r(0.0, 6.3),
             };
             self.smoke.push(puff);
         }
@@ -570,14 +584,17 @@ impl Lighting {
                 continue;
             }
             let fade = (1.0 - age / p.life).max(0.0);
-            let alpha = p.thick * (age / 0.4).min(1.0) * fade.powf(1.5) * 0.75;
+            let alpha = p.thick * (age / 0.3).min(1.0) * fade * fade * 0.85;
             let radius = (p.size + p.grow * age) * rect.height();
-            let y = (p.y + p.vy * age).max(0.01);
+            // Off with the draught, curling as it goes.
+            let x = p.x + p.vx * age + 0.5 * p.wind * age * age;
+            let curl = (age * 2.4 + p.phase).sin() * 0.012 * age.min(1.5);
+            let y = (p.y + p.vy * age + curl).max(0.008);
             painter.add(halo(
-                at(p.x + p.vx * age, y),
-                radius * 1.4,
+                at(x, y),
+                radius * 1.8,
                 radius,
-                Color32::from_rgba_unmultiplied(168, 162, 154, (alpha * 255.0) as u8),
+                Color32::from_rgba_unmultiplied(132, 127, 120, (alpha * 255.0) as u8),
             ));
         }
         // Its glass, falling to the foot of the board and lying there,

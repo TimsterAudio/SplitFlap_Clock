@@ -87,5 +87,10 @@ The board lettering is Barlow Condensed SemiBold by The Barlow Project
 Authors, under the SIL Open Font License (`assets/OFL.txt`). It is built
 into the binary, and into the user guide with Barlow Semi Condensed.
 
+The list of cities to search for places by comes from the
+[city-timezones](https://github.com/kevinroberts/city-timezones) package
+(MIT licence), itself from Natural Earth's populated places (public
+domain); `tools/cities.py` turns it into `src/cities.rs`.
+
 Thanks to Oscar, who asked for unlimited places, hand-set times, colours and
 regions, then tested them all and found the colour you couldn't paste.

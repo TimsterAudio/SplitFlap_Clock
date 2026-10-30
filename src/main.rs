@@ -4,6 +4,7 @@
 mod alarm;
 mod app;
 mod autostart;
+mod cities;
 mod desktops;
 mod flap;
 mod icon;

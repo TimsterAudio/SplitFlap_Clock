@@ -106,6 +106,10 @@ pub struct Zone {
     /// Its own number, so alarms can follow it wherever it moves.
     #[serde(default)]
     pub id: u64,
+    /// Where it is, latitude and longitude, for its sky: the city it was
+    /// found by, or else its time zone's.
+    #[serde(default)]
+    pub at: Option<(f64, f64)>,
 }
 
 impl Zone {
@@ -117,6 +121,7 @@ impl Zone {
             colour: None,
             offset: None,
             id: 0,
+            at: None,
         }
     }
 
@@ -289,6 +294,9 @@ pub struct Saved {
     pub alarms: Vec<Alarm>,
     /// The chime's own volume, which rings whether the clatter is on or not.
     pub alarm_volume: f32,
+    /// A blowing bulb's own volume, the pop and its glass, whether the
+    /// clatter is on or not; 0 for none.
+    pub bulb_volume: f32,
 }
 
 impl Saved {
@@ -370,6 +378,7 @@ impl Default for Saved {
             region_order: Vec::new(),
             alarms: Vec::new(),
             alarm_volume: 0.8,
+            bulb_volume: 0.6,
         }
     }
 }
@@ -806,7 +815,12 @@ impl ClockApp {
                     continue;
                 };
                 let t = utc.with_timezone(&tz);
-                (t.hour(), t.minute(), t.weekday(), places::coords(&z.tz))
+                (
+                    t.hour(),
+                    t.minute(),
+                    t.weekday(),
+                    z.at.or_else(|| places::coords(&z.tz)),
+                )
             };
             let sky = s.sky_places.then(|| sky(utc, at, (h * 60 + m) as i64));
             let n = seen.entry(&z.tz).or_default();
@@ -935,10 +949,11 @@ impl ClockApp {
     /// when it is turned off. If it won't open, as when the clock starts at
     /// login before the sound system is up, it tries again now and then.
     fn apply_sound(&mut self, time: f64) {
-        // The output is open for the clatter, and for alarms, which chime
-        // whether the clatter is on or not.
-        let want =
-            self.saved.sound || self.saved.alarms.iter().any(|a| a.on) || !self.ringing.is_empty();
+        // The output is open for the clatter, for alarms, which chime
+        // whether the clatter is on or not, and for bulbs that may blow.
+        let s = &self.saved;
+        let bulbs = s.lighting != Mood::Off && s.bulbs != Failures::Never && s.bulb_volume > 0.0;
+        let want = s.sound || bulbs || s.alarms.iter().any(|a| a.on) || !self.ringing.is_empty();
         if want != self.sound_applied {
             self.sound_applied = want;
             self.sound = None;
@@ -1138,9 +1153,10 @@ impl ClockApp {
                 .update(lamps, time, self.saved.bulbs, self.saved.replace);
             // A bulb that blows pops, if the sound is on.
             let (pops, n) = self.lighting.take_pops();
-            if let (true, Some(sound)) = (self.saved.sound, &mut self.sound) {
+            if let Some(sound) = &mut self.sound {
                 for i in pops {
-                    sound.pop((i as f32 + 0.5) / n.max(1) as f32 * 2.0 - 1.0);
+                    let pan = (i as f32 + 0.5) / n.max(1) as f32 * 2.0 - 1.0;
+                    sound.pop(pan, self.saved.bulb_volume);
                 }
             }
             if self.saved.replace == Replace::ByHand {

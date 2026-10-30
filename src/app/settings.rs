@@ -970,33 +970,31 @@ impl ClockApp {
         }
     }
 
-    /// Search for a time zone, pick one, Add.
+    /// Search for a city or a time zone, pick one, Add.
     fn add_place(&mut self, ui: &mut Ui) {
-        let q = self.search.trim().to_lowercase().replace(' ', "_");
-        let found: Vec<&'static str> = if q.is_empty() {
-            Vec::new()
-        } else {
-            chrono_tz::TZ_VARIANTS
-                .iter()
-                .map(|tz| tz.name())
-                .filter(|name| name.to_lowercase().contains(&q))
-                .collect()
-        };
-        if self.picked.as_deref().is_some_and(|p| !found.contains(&p)) {
+        let found = find_places(&self.search);
+        if self
+            .picked
+            .as_deref()
+            .is_some_and(|p| !found.iter().any(|f| f.key == p))
+        {
             self.picked = None;
         }
         // The one picked from the list, or else the best match.
-        let choice = self.picked.clone().or(found.first().map(|f| f.to_string()));
+        let choice = match &self.picked {
+            Some(p) => found.iter().find(|f| f.key == *p),
+            None => found.first(),
+        };
         let mut add = false;
         ui.horizontal(|ui| {
-            let label = match &choice {
-                Some(c) => format!("Add {}", default_label(c)),
+            let label = match choice {
+                Some(c) => format!("Add {}", c.label),
                 None => "Add".into(),
             };
             let button_w = 150.0;
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.search)
-                    .hint_text("Add a place: search, e.g. Tokyo or New York")
+                    .hint_text("Add a place: a city, a country, or a time zone")
                     .desired_width(ui.available_width() - button_w - 8.0),
             );
             add |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -1005,36 +1003,67 @@ impl ClockApp {
                 .min_size(vec2(button_w, 26.0));
             add |= ui.add_enabled(choice.is_some(), b).clicked();
         });
-        if let (true, Some(c)) = (add, &choice) {
-            self.saved.zones.push(Zone::new(c));
+        if let (true, Some(c)) = (add, choice) {
+            self.saved.zones.push(Zone {
+                label: c.label.clone(),
+                at: c.at,
+                ..Zone::new(c.tz)
+            });
             self.saved.number();
             self.open_place = self.saved.zones.last().map(|z| z.id);
             self.search.clear();
             self.picked = None;
+            return;
         }
-        if !q.is_empty() {
-            egui::Frame::new()
-                .fill(card_fill(ui))
-                .corner_radius(8)
-                .inner_margin(6)
-                .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("found")
-                        .max_height(150.0)
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            for name in &found {
-                                let on = choice.as_deref() == Some(*name);
-                                if ui.selectable_label(on, *name).clicked() {
-                                    self.picked = Some(name.to_string());
-                                }
-                            }
-                            if found.is_empty() {
-                                ui.label(egui::RichText::new("No time zone matches.").weak());
-                            }
-                        });
-                });
+        if self.search.trim().is_empty() {
+            return;
         }
+        let chosen = choice.map(|c| c.key.clone());
+        egui::Frame::new()
+            .fill(card_fill(ui))
+            .corner_radius(8)
+            .inner_margin(6)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("found")
+                    .max_height(190.0)
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        for f in &found {
+                            let on = chosen.as_deref() == Some(f.key.as_str());
+                            let mut text = egui::text::LayoutJob::default();
+                            let strong = ui.visuals().strong_text_color();
+                            let weak = ui.visuals().weak_text_color();
+                            let font = egui::FontId::proportional(13.5);
+                            text.append(
+                                &f.name,
+                                0.0,
+                                egui::TextFormat::simple(font.clone(), strong),
+                            );
+                            if !f.around.is_empty() {
+                                text.append(
+                                    &format!(", {}", f.around),
+                                    0.0,
+                                    egui::TextFormat::simple(
+                                        font.clone(),
+                                        ui.visuals().text_color(),
+                                    ),
+                                );
+                            }
+                            text.append(
+                                &format!("   {}", f.tz),
+                                0.0,
+                                egui::TextFormat::simple(egui::FontId::proportional(12.0), weak),
+                            );
+                            if ui.selectable_label(on, text).clicked() {
+                                self.picked = Some(f.key.clone());
+                            }
+                        }
+                        if found.is_empty() {
+                            ui.label(egui::RichText::new("No city or time zone matches.").weak());
+                        }
+                    });
+            });
     }
 
     fn alarms_page(&mut self, ui: &mut Ui) {
@@ -1397,6 +1426,25 @@ impl ClockApp {
                         }
                     },
                 );
+                divider(ui);
+                row(
+                    ui,
+                    "Bulb sounds",
+                    "The pop, and the glass landing: on its own, whether the clatter's on or not",
+                    |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut s.bulb_volume, 0.0..=1.0).custom_formatter(
+                                |v, _| {
+                                    if v == 0.0 {
+                                        "Off".into()
+                                    } else {
+                                        format!("{:.0}%", v * 100.0)
+                                    }
+                                },
+                            ),
+                        );
+                    },
+                );
             });
         });
         if blow {
@@ -1569,6 +1617,136 @@ impl ClockApp {
             self.beer_open = false;
         }
     }
+}
+
+/// A place found by a search: a city, or a time zone by its own name.
+struct Found {
+    /// What the board calls it.
+    label: String,
+    name: String,
+    /// Where it is: region and country.
+    around: String,
+    tz: &'static str,
+    at: Option<(f64, f64)>,
+    /// Which one it is, for picking it from the list.
+    key: String,
+}
+
+/// `text` lower case and without accents, as the cities' names are kept
+/// for matching: "São Paulo" is "sao paulo".
+fn plain(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.to_lowercase().chars() {
+        let base = match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => "a",
+            'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' => "c",
+            'ď' | 'đ' => "d",
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => "e",
+            'ğ' | 'ĝ' | 'ġ' | 'ģ' => "g",
+            'ĥ' | 'ħ' => "h",
+            'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ı' => "i",
+            'ĵ' => "j",
+            'ķ' => "k",
+            'ĺ' | 'ļ' | 'ľ' | 'ŀ' | 'ł' => "l",
+            'ñ' | 'ń' | 'ņ' | 'ň' => "n",
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => "o",
+            'ŕ' | 'ŗ' | 'ř' => "r",
+            'ś' | 'ŝ' | 'ş' | 'š' | 'ș' => "s",
+            'ţ' | 'ť' | 'ŧ' | 'ț' => "t",
+            'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => "u",
+            'ŵ' => "w",
+            'ý' | 'ÿ' | 'ŷ' => "y",
+            'ź' | 'ż' | 'ž' => "z",
+            'ß' => "ss",
+            'æ' => "ae",
+            'œ' => "oe",
+            'þ' => "th",
+            _ => {
+                out.push(c);
+                continue;
+            }
+        };
+        out.push_str(base);
+    }
+    out
+}
+
+/// The most places a search lists.
+const MOST_FOUND: usize = 80;
+
+/// The cities and time zones that `query` finds, best first: cities whose
+/// name starts with it, then whose name has a word starting with it, then
+/// with it anywhere in the name, then in that region or country, biggest
+/// first in each; then time zones with it in their name. "Paris, France"
+/// looks for Paris in France.
+fn find_places(query: &str) -> Vec<Found> {
+    let q = plain(query.trim());
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let (city_q, where_q) = match q.split_once(',') {
+        Some((c, w)) => (c.trim().to_string(), w.trim().to_string()),
+        None => (q.clone(), String::new()),
+    };
+    let word = format!(" {city_q}");
+    let mut hits: Vec<(u8, &crate::cities::City)> = crate::cities::CITIES
+        .iter()
+        .filter(|c| where_q.is_empty() || c.around.contains(&where_q))
+        .filter_map(|c| {
+            let score = if c.words.starts_with(&city_q) {
+                0
+            } else if c.words.contains(&word) {
+                1
+            } else if c.words.contains(&city_q) {
+                2
+            } else if where_q.is_empty() && c.around.contains(&city_q) {
+                3
+            } else {
+                return None;
+            };
+            Some((score, c))
+        })
+        .collect();
+    // The list is biggest first already; a stable sort keeps that.
+    hits.sort_by_key(|(score, _)| *score);
+    let mut out: Vec<Found> = hits
+        .into_iter()
+        .take(MOST_FOUND)
+        .map(|(_, c)| {
+            let around = [c.region, c.country]
+                .into_iter()
+                .filter(|p| !p.is_empty() && *p != c.name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            Found {
+                label: c.ascii.to_uppercase().chars().take(NAME_CARDS).collect(),
+                name: c.name.to_string(),
+                around,
+                tz: c.tz,
+                at: Some((c.lat, c.lon)),
+                key: format!("{}|{}|{}|{}", c.name, c.region, c.country, c.tz),
+            }
+        })
+        .collect();
+    if where_q.is_empty() && out.len() < MOST_FOUND {
+        let zq = q.replace(' ', "_");
+        for tz in chrono_tz::TZ_VARIANTS.iter().map(|t| t.name()) {
+            if out.len() >= MOST_FOUND {
+                break;
+            }
+            if tz.to_lowercase().contains(&zq) {
+                out.push(Found {
+                    label: default_label(tz),
+                    name: tz.to_string(),
+                    around: "time zone".into(),
+                    tz,
+                    at: None,
+                    key: tz.to_string(),
+                });
+            }
+        }
+    }
+    out
 }
 
 /// A place opened up: its name, region, colour and time, and Remove.
@@ -1875,6 +2053,45 @@ mod tests {
         assert_eq!(labels(&s), ["TOKYO", "LONDON", "NEW YORK"]);
         move_dropped(&mut s, Drag::Region("".into()), "ASIA", None);
         assert_eq!(labels(&s), ["NEW YORK", "TOKYO", "LONDON"]);
+    }
+
+    #[test]
+    fn searches_find_the_city_you_mean_first() {
+        let first = |q: &str| {
+            let f = find_places(q);
+            let c = &f[0];
+            (c.label.clone(), c.around.clone(), c.tz)
+        };
+        let (label, around, tz) = first("sydney");
+        assert_eq!((label.as_str(), tz), ("SYDNEY", "Australia/Sydney"));
+        assert!(around.contains("Australia"));
+        assert_eq!(first("Manchester").2, "Europe/London");
+        assert_eq!(first("sao paulo").2, "America/Sao_Paulo");
+        assert_eq!(first("são paulo").2, "America/Sao_Paulo");
+        assert_eq!(first("paris, france").2, "Europe/Paris");
+        assert!(find_places("paris, texas")
+            .iter()
+            .all(|f| f.around.contains("Texas")));
+        // A country lists its cities, biggest first.
+        assert_eq!(first("new zealand").0, "AUCKLAND");
+        // Time zones by their own names still turn up.
+        assert!(find_places("europe/lond")
+            .iter()
+            .any(|f| f.tz == "Europe/London" && f.at.is_none()));
+        assert!(find_places("").is_empty());
+        assert!(find_places("qqqqzz").is_empty());
+        // The board's name fits its cards.
+        assert!(find_places("ciudad")
+            .iter()
+            .all(|f| f.label.chars().count() <= NAME_CARDS));
+    }
+
+    #[test]
+    fn every_city_is_in_a_time_zone_the_clock_knows() {
+        for c in crate::cities::CITIES {
+            assert!(Tz::from_str(c.tz).is_ok(), "{} {}", c.name, c.tz);
+            assert!(c.lat.abs() <= 90.0 && c.lon.abs() <= 180.0, "{}", c.name);
+        }
     }
 
     #[test]

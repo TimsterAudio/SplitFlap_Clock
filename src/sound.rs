@@ -41,8 +41,9 @@ pub enum Event {
     Click(Click),
     /// The alarm chime, at its own volume from 0 to 1.
     Chime(f32),
-    /// A bulb blowing, from -1 (left of the board) to 1 (right).
-    Pop(f32),
+    /// A bulb blowing, from -1 (left of the board) to 1 (right), at its
+    /// own volume from 0 to 1.
+    Pop(f32, f32),
 }
 
 const VOICES: usize = 64;
@@ -71,6 +72,8 @@ struct Voice {
     knock_phase: f32,
     knock_step: f32,
     knock_decay: f32,
+    /// At its own volume, rather than the clatter's.
+    own: bool,
 }
 
 /// One bell note of the chime.
@@ -188,6 +191,7 @@ impl Clatter {
             knock_phase: 0.0,
             knock_step: std::f32::consts::TAU * 240.0 * tone / rate,
             knock_decay: (-1.0 / (0.012 * rate)).exp(),
+            own: false,
         };
         self.take_voice(v);
     }
@@ -196,21 +200,22 @@ impl Clatter {
         match e {
             Event::Click(c) => self.trigger(c),
             Event::Chime(gain) => self.chime(gain),
-            Event::Pop(pan) => self.pop(pan),
+            Event::Pop(pan, gain) => self.pop(pan, gain),
         }
     }
 
     /// A bulb blowing at `pan`: the crack of the glass and a dull thump,
     /// then its pieces tinkling down a moment later.
-    pub fn pop(&mut self, pan: f32) {
+    pub fn pop(&mut self, pan: f32, gain: f32) {
         let rate = self.rate;
+        let level = gain.clamp(0.0, 1.0);
         let angle = (pan.clamp(-1.0, 1.0) * 0.7 + 1.0) * std::f32::consts::FRAC_PI_4;
         let crack = Voice {
             live: true,
             wait: 0,
             age: 0,
-            left: 2.4 * angle.cos(),
-            right: 2.4 * angle.sin(),
+            left: 1.6 * level * angle.cos(),
+            right: 1.6 * level * angle.sin(),
             strike: 1.0,
             strike_decay: (-1.0 / (0.0025 * rate)).exp(),
             ring: Resonator::new(3100.0, 1400.0, rate),
@@ -219,12 +224,13 @@ impl Clatter {
             knock_phase: 0.0,
             knock_step: std::f32::consts::TAU * 110.0 / rate,
             knock_decay: (-1.0 / (0.02 * rate)).exp(),
+            own: true,
         };
         self.take_voice(crack);
         // The glass landing, piece by piece, high and ringing.
         for k in 0..7 {
             let wait = 0.42 + k as f32 * 0.045 + self.rand(0.0, 0.12);
-            let gain = self.rand(0.18, 0.45);
+            let gain = self.rand(0.7, 1.4) * level;
             let tink = Voice {
                 live: true,
                 wait: (wait * rate) as u32,
@@ -239,6 +245,7 @@ impl Clatter {
                 knock_phase: 0.0,
                 knock_step: 0.0,
                 knock_decay: 0.0,
+                own: true,
             };
             self.take_voice(tink);
         }
@@ -283,6 +290,7 @@ impl Clatter {
         let life = (LIFE * self.rate) as u32;
         for frame in out.as_chunks_mut::<2>().0 {
             let (mut l, mut r) = (0.0, 0.0);
+            let (mut own_l, mut own_r) = (0.0, 0.0);
             for i in 0..VOICES {
                 if !self.voices[i].live {
                     continue;
@@ -299,8 +307,13 @@ impl Clatter {
                 v.knock *= v.knock_decay;
                 v.knock_phase += v.knock_step;
                 let s = 0.6 * x + 7.0 * v.ring.run(x) + 2.0 * v.body.run(x) + knock;
-                l += s * v.left;
-                r += s * v.right;
+                if v.own {
+                    own_l += s * v.left;
+                    own_r += s * v.right;
+                } else {
+                    l += s * v.left;
+                    r += s * v.right;
+                }
                 v.age += 1;
                 if v.age > life {
                     v.live = false;
@@ -311,8 +324,8 @@ impl Clatter {
                 bell += t.sample();
             }
             // A soft limit, so a whole board at once doesn't clip.
-            frame[0] += ((l * volume + bell) * 0.5).tanh();
-            frame[1] += ((r * volume + bell) * 0.5).tanh();
+            frame[0] += ((l * volume + own_l + bell) * 0.5).tanh();
+            frame[1] += ((r * volume + own_r + bell) * 0.5).tanh();
         }
     }
 }
@@ -358,9 +371,10 @@ impl Sound {
         let _ = self.events.push(Event::Click(c));
     }
 
-    /// A bulb blowing, at `pan` from -1 (left) to 1 (right).
-    pub fn pop(&mut self, pan: f32) {
-        let _ = self.events.push(Event::Pop(pan));
+    /// A bulb blowing, at `pan` from -1 (left) to 1 (right), at `volume`
+    /// from 0 to 1.
+    pub fn pop(&mut self, pan: f32, volume: f32) {
+        let _ = self.events.push(Event::Pop(pan, gain(volume)));
     }
 
     /// Rings the alarm chime once, at `volume` from 0 to 1.
@@ -487,7 +501,7 @@ mod tests {
     fn a_bulb_pops_then_its_glass_tinkles() {
         let rate = 48_000.0;
         let mut c = Clatter::new(rate, Rng::with_seed(9));
-        c.pop(0.5);
+        c.pop(0.5, 0.5);
         let mut out = vec![0.0; 2 * 48_000];
         c.render(&mut out, 1.0);
         let peak = |a: f32, b: f32| {
@@ -514,7 +528,7 @@ mod tests {
     fn render_a_pop() {
         let path = std::env::var("POP_WAV").expect("set POP_WAV to a path");
         let mut c = Clatter::new(48_000.0, Rng::with_seed(9));
-        c.pop(0.0);
+        c.pop(0.0, 0.5);
         let mut out = vec![0.0; 2 * 48_000];
         c.render(&mut out, 0.6);
         write_wav(&path, &out);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Find places by city**: search for any of over 7,000 cities and towns, by name ("Manchester", "São Paulo"), by name and country ("Paris, France"), or by country ("New Zealand" lists its cities, biggest first), as well as by time zone. A place added from a city takes the city's name, and its sky card goes by the city's own sunrise and sunset.
+- **Bulb sounds** have a volume of their own on the Effects page, and play whether the clatter is on or not (Off turns them off). The glass landing is louder, next to the pop.
+- A blown bulb's smoke is a thin trail now, carried off sideways by the draught, mostly across the board, and gone in a few seconds.
+
 - **Bulbs blow properly now**: a white-hot flash and a pop (with the clatter sound on), a wisp of smoke that spreads under the top of the board and clears, and the bulb's glass falling to the foot of the board, where it lies, glinting, until the bulb is replaced. Replacing it sweeps up the glass.
 - Bulbs can **Fail about every hour**, and **Blow one now**, on the Effects page, sets one off straight away. **Last flight out** now fails bulbs every hour or so.
 
