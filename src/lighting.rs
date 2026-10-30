@@ -417,18 +417,18 @@ impl Lighting {
         let inward = if x < 0.5 { 1.0 } else { -1.0 };
         let way = if r(0.0, 1.0) < 0.8 { inward } else { -inward };
         let draught = r(0.6, 1.4);
-        for k in 0..20 {
+        for k in 0..16 {
             let puff = Puff {
                 born: time + k as f64 * 0.14 + r(0.0, 0.1) as f64,
                 life: r(3.8, 6.0),
                 x: x + r(-0.006, 0.006),
                 y: r(0.03, 0.07),
-                vx: way * draught * r(0.012, 0.03),
-                wind: way * draught * r(0.006, 0.016),
+                vx: way * draught * r(0.02, 0.045),
+                wind: way * draught * r(0.012, 0.028),
                 vy: r(-0.012, 0.01),
                 size: r(0.01, 0.018),
                 grow: r(0.015, 0.03),
-                thick: r(0.35, 0.6),
+                thick: r(0.28, 0.5),
                 phase: r(0.0, 6.3),
             };
             self.smoke.push(puff);

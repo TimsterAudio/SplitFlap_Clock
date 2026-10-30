@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Moving a place** refreshes the board from where it went down: its row and those below it spin round, and the rows above stay as they are.
+- **Removing an alarm** from its line in Settings, without opening it: the cross asks "Remove this alarm?" first.
+- The smoke is lighter and the draught carries it away quicker.
+
 - **Find places by city**: search for any of over 7,000 cities and towns, by name ("Manchester", "São Paulo"), by name and country ("Paris, France"), or by country ("New Zealand" lists its cities, biggest first), as well as by time zone. A place added from a city takes the city's name, and its sky card goes by the city's own sunrise and sunset.
 - **Bulb sounds** have a volume of their own on the Effects page, and play whether the clatter is on or not (Off turns them off). The glass landing is louder, next to the pop.
 - A blown bulb's smoke is a thin trail now, carried off sideways by the draught, mostly across the board, and gone in a few seconds.

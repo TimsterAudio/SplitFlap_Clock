@@ -701,6 +701,11 @@ pub struct ClockApp {
     page: settings::Page,
     open_place: Option<u64>,
     open_alarm: Option<u64>,
+    /// The alarm whose Remove is waiting to be made sure of.
+    confirm_remove: Option<u64>,
+    /// A place just moved in Settings, by its number, for the board to
+    /// refresh from its row down.
+    moved_place: Option<u64>,
     /// The settings window's preview of the board, by row and card.
     preview_flaps: HashMap<(u8, usize), Flap>,
     lighting: Lighting,
@@ -755,6 +760,8 @@ impl ClockApp {
             page: settings::Page::default(),
             open_place: None,
             open_alarm: None,
+            confirm_remove: None,
+            moved_place: None,
             preview_flaps: HashMap::new(),
             lighting,
             next_chime: 0.0,
@@ -800,7 +807,6 @@ impl ClockApp {
             });
         }
         let utc = Utc::now();
-        let mut seen: HashMap<&str, usize> = HashMap::new();
         for (heading, z) in grouped(s) {
             // The time there: by hand, or from its time zone. A place set by
             // hand has no location, so its sky goes by its clock.
@@ -823,11 +829,9 @@ impl ClockApp {
                 )
             };
             let sky = s.sky_places.then(|| sky(utc, at, (h * 60 + m) as i64));
-            let n = seen.entry(&z.tz).or_default();
-            *n += 1;
             let day = day.to_string().to_uppercase();
             lines.push(Line {
-                key: format!("zone:{}:{n}", z.tz),
+                key: format!("zone:{}", z.id),
                 cells: zone_cells(&z.label.to_uppercase(), h, m, &day, s.h24, sky),
                 ink: z.colour.map_or(ink, rgb),
                 heading,
@@ -1174,7 +1178,14 @@ impl ClockApp {
         let mut buttons: Vec<(Rect, Act, Color32)> = Vec::new();
         let caption = FontId::new(11.0 * scale, FontFamily::Name("flap".into()));
         let region_font = FontId::new(15.0 * scale, FontFamily::Name("flap".into()));
+        // A place just moved: the board refreshes from its row down, as a
+        // real board would rewrite the rows from where it went.
+        let moved_from = self.moved_place.take().and_then(|id| {
+            let key = format!("zone:{id}");
+            lines.iter().position(|l| l.key == key)
+        });
         for (i, line) in lines.iter().enumerate() {
+            let refresh = refresh || moved_from.is_some_and(|from| i >= from);
             if i > 0 {
                 y += Self::gap_before(&lines, i);
             }

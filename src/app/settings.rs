@@ -382,6 +382,26 @@ fn grip(ui: &mut Ui) {
     }
 }
 
+/// A small cross to click, to remove something; red under the pointer.
+fn remove_button(ui: &mut Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::click());
+    let colour = if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);
+        Color32::from_rgb(230, 110, 95)
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    let c = rect.center();
+    let d = 4.5;
+    let stroke = egui::Stroke::new(1.6, colour);
+    ui.painter()
+        .line_segment([c + vec2(-d, -d), c + vec2(d, d)], stroke);
+    ui.painter()
+        .line_segment([c + vec2(-d, d), c + vec2(d, -d)], stroke);
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// A coloured dot, for a place's or an alarm's colour.
 fn dot(ui: &mut Ui, colour: Color32) {
     let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
@@ -966,7 +986,7 @@ impl ClockApp {
             s.zones.retain(|z| z.id != id);
         }
         if let Some((what, region, before)) = dropped {
-            move_dropped(s, what, &region, before);
+            self.moved_place = move_dropped(s, what, &region, before);
         }
     }
 
@@ -1079,6 +1099,7 @@ impl ClockApp {
         let mut remove = None;
         let mut changed = Vec::new();
         let open = &mut self.open_alarm;
+        let confirm = &mut self.confirm_remove;
         let b = egui::Button::new(
             egui::RichText::new("+  Add an alarm")
                 .color(DARK_INK)
@@ -1147,6 +1168,28 @@ impl ClockApp {
                                 .clicked()
                             {
                                 *open = if is_open { None } else { Some(a.id) };
+                            }
+                            // Removing it from here, with a word to make sure.
+                            if *confirm == Some(a.id) {
+                                if ui.button("Keep it").clicked() {
+                                    *confirm = None;
+                                }
+                                let yes = egui::Button::new(
+                                    egui::RichText::new("Remove").color(Color32::WHITE).strong(),
+                                )
+                                .fill(Color32::from_rgb(178, 62, 48));
+                                if ui.add(yes).clicked() {
+                                    remove = Some(i);
+                                    *confirm = None;
+                                }
+                                ui.label("Remove this alarm?");
+                                return;
+                            }
+                            if remove_button(ui)
+                                .on_hover_text("Remove this alarm")
+                                .clicked()
+                            {
+                                *confirm = Some(a.id);
                             }
                             dot(ui, colour);
                             if a.date.is_none() {
@@ -1942,16 +1985,20 @@ fn alarm_editor(
 }
 
 /// Moves what was dragged: a place to before `before` (or the end of the
-/// region), taking on `region`; or a region to before `region`.
-fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) {
-    match what {
+/// region), taking on `region`; or a region to before `region`. Says which
+/// place now heads the rows that moved: the place, or the region's first,
+/// if anything moved at all.
+fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) -> Option<u64> {
+    let rows = |s: &Saved| -> Vec<(u64, String)> {
+        grouped(s)
+            .iter()
+            .map(|(_, z)| (z.id, z.region_key()))
+            .collect()
+    };
+    let was = rows(s);
+    let moved = match what {
         Drag::Place(id) => {
-            let Some(from) = s.zones.iter().position(|z| z.id == id) else {
-                return;
-            };
-            if before == Some(id) {
-                // Dropped on itself: only the region can change.
-            }
+            let from = s.zones.iter().position(|z| z.id == id)?;
             let mut z = s.zones.remove(from);
             if z.region_key() != region {
                 // Take the region's name as its other places spell it.
@@ -1961,35 +2008,30 @@ fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) {
                     .find(|o| o.region_key() == region)
                     .map_or(region.to_string(), |o| o.region.clone());
             }
-            let at = match before.filter(|b| *b != id) {
+            let at = match before {
+                // Dropped on itself: only its region can change.
+                Some(b) if b == id => from.min(s.zones.len()),
                 Some(b) => s
                     .zones
                     .iter()
                     .position(|o| o.id == b)
                     .unwrap_or(s.zones.len()),
-                None => {
-                    // After the region's last place, or at the end.
-                    s.zones
-                        .iter()
-                        .rposition(|o| o.region_key() == region)
-                        .map_or(s.zones.len(), |p| p + 1)
-                }
-            };
-            let at = if before == Some(id) {
-                from.min(s.zones.len())
-            } else {
-                at
+                // After the region's last place, or at the end.
+                None => s
+                    .zones
+                    .iter()
+                    .rposition(|o| o.region_key() == region)
+                    .map_or(s.zones.len(), |p| p + 1),
             };
             s.zones.insert(at, z);
+            id
         }
         Drag::Region(r) => {
             if r == region {
-                return;
+                return None;
             }
             let mut order = region_order(s);
-            let Some(from) = order.iter().position(|x| *x == r) else {
-                return;
-            };
+            let from = order.iter().position(|x| *x == r)?;
             let moving = order.remove(from);
             let to = order
                 .iter()
@@ -1997,8 +2039,10 @@ fn move_dropped(s: &mut Saved, what: Drag, region: &str, before: Option<u64>) {
                 .unwrap_or(order.len());
             order.insert(to, moving);
             s.region_order = order;
+            s.zones.iter().find(|z| z.region_key() == r)?.id
         }
-    }
+    };
+    (rows(s) != was).then_some(moved)
 }
 
 #[cfg(test)]
@@ -2027,11 +2071,17 @@ mod tests {
             ],
             ..Saved::default()
         };
-        // Paris before London.
-        move_dropped(&mut s, Drag::Place(2), "EUROPE", Some(1));
+        // Paris before London: the board refreshes from Paris down.
+        assert_eq!(
+            move_dropped(&mut s, Drag::Place(2), "EUROPE", Some(1)),
+            Some(2)
+        );
         assert_eq!(labels(&s), ["PARIS", "LONDON", "TOKYO"]);
         // Tokyo into Europe, at its end.
-        move_dropped(&mut s, Drag::Place(3), "EUROPE", None);
+        assert_eq!(
+            move_dropped(&mut s, Drag::Place(3), "EUROPE", None),
+            Some(3)
+        );
         assert_eq!(labels(&s), ["PARIS", "LONDON", "TOKYO"]);
         assert_eq!(s.zones.iter().find(|z| z.id == 3).unwrap().region, "Europe");
         // London on itself, in a new spot of no region.
@@ -2049,7 +2099,16 @@ mod tests {
             ],
             ..Saved::default()
         };
-        move_dropped(&mut s, Drag::Region("ASIA".into()), "EUROPE", None);
+        // Asia above Europe: from Tokyo, its first place, down.
+        assert_eq!(
+            move_dropped(&mut s, Drag::Region("ASIA".into()), "EUROPE", None),
+            Some(2)
+        );
+        // Dropped where it already is: nothing moves, nothing refreshes.
+        assert_eq!(
+            move_dropped(&mut s, Drag::Place(1), "EUROPE", Some(1)),
+            None
+        );
         assert_eq!(labels(&s), ["TOKYO", "LONDON", "NEW YORK"]);
         move_dropped(&mut s, Drag::Region("".into()), "ASIA", None);
         assert_eq!(labels(&s), ["NEW YORK", "TOKYO", "LONDON"]);
