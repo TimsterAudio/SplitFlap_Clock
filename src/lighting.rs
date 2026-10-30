@@ -66,6 +66,10 @@ impl Mood {
 
 const DAY: f64 = 24.0 * 3600.0;
 
+/// How far the dimmer turns the lamps down, and up.
+pub const DIMMEST: f32 = 0.25;
+pub const BRIGHTEST: f32 = 1.6;
+
 /// Who replaces a dead bulb.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
 pub enum Replace {
@@ -511,12 +515,17 @@ impl Lighting {
         ((look.ambient + look.lamp * pool).min(1.0), look.glow * pool)
     }
 
-    /// Lights the board at `rect`, drawn already, in `mood`, at `time`:
+    /// Lights the board at `rect`, drawn already, in `mood`, at `time`,
+    /// the lamps turned up or down by `dimmer` (1 as the mood has them):
     /// and any bulb that has blown, its flash, smoke and glass.
-    pub fn draw(&self, painter: &Painter, rect: Rect, mood: Mood, time: f64) {
-        let Some(look) = mood.look() else {
+    pub fn draw(&self, painter: &Painter, rect: Rect, mood: Mood, dimmer: f32, time: f64) {
+        let Some(mut look) = mood.look() else {
             return;
         };
+        // The dimmer turns the lamps up or down; the hall's own light stays.
+        let dimmer = dimmer.clamp(DIMMEST, BRIGHTEST);
+        look.lamp *= dimmer;
+        look.glow *= dimmer;
         const COLS: usize = 40;
         const ROWS: usize = 20;
         let mut shade = Mesh::default();
@@ -556,7 +565,7 @@ impl Lighting {
                 pos2(x, rect.min.y),
                 rx,
                 ry,
-                additive(look.tint, 0.55 * lamp.power),
+                additive(look.tint, 0.55 * lamp.power * dimmer),
             ));
         }
         let at = |x: f32, y: f32| {

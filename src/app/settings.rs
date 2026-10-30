@@ -698,7 +698,7 @@ impl ClockApp {
             }
             y += h + gap;
         }
-        self.lighting.draw(&painter, rect, mood, time);
+        self.lighting.draw(&painter, rect, mood, s.dimmer, time);
         painter.text(
             rect.right_bottom() - vec2(10.0, 6.0),
             egui::Align2::RIGHT_BOTTOM,
@@ -1428,6 +1428,22 @@ impl ClockApp {
             });
             divider(ui);
             ui.add_enabled_ui(s.lighting != Mood::Off, |ui| {
+                row(ui, "Dimmer", "The lamps turned down, or up", |ui| {
+                    ui.add(
+                        egui::Slider::new(
+                            &mut s.dimmer,
+                            crate::lighting::DIMMEST..=crate::lighting::BRIGHTEST,
+                        )
+                        .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
+                    );
+                    if ui
+                        .add_enabled(s.dimmer != 1.0, egui::Button::new("Normal").small())
+                        .clicked()
+                    {
+                        s.dimmer = 1.0;
+                    }
+                });
+                divider(ui);
                 row(
                     ui,
                     "Bulbs",

@@ -297,6 +297,8 @@ pub struct Saved {
     /// A blowing bulb's own volume, the pop and its glass, whether the
     /// clatter is on or not; 0 for none.
     pub bulb_volume: f32,
+    /// The lamps' dimmer, 1 as the mood has them.
+    pub dimmer: f32,
 }
 
 impl Saved {
@@ -379,6 +381,7 @@ impl Default for Saved {
             alarms: Vec::new(),
             alarm_volume: 0.8,
             bulb_volume: 0.6,
+            dimmer: 1.0,
         }
     }
 }
@@ -1347,7 +1350,8 @@ impl ClockApp {
             self.settings_open = true;
         }
         // The lamps' light over everything.
-        self.lighting.draw(&painter, full, mood, time);
+        self.lighting
+            .draw(&painter, full, mood, self.saved.dimmer, time);
         // A dead bulb, to be replaced by hand: click it.
         let dead_lamp = if mood != Mood::Off && self.saved.replace == Replace::ByHand {
             ctx.input(|i| i.pointer.hover_pos())

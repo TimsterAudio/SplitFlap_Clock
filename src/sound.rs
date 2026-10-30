@@ -232,45 +232,55 @@ impl Clatter {
             own: true,
         };
         self.take_voice(crack);
-        // The glass landing, piece by piece, high and ringing.
-        for k in 0..7 {
-            let wait = 0.42 + k as f32 * 0.045 + self.rand(0.0, 0.12);
-            let gain = self.rand(0.7, 1.4) * level;
-            let tink = Voice {
-                live: true,
-                wait: (wait * rate) as u32,
-                age: 0,
-                left: gain * angle.cos(),
-                right: gain * angle.sin(),
-                strike: 1.0,
-                strike_decay: (-1.0 / (0.0004 * rate)).exp(),
-                ring: Resonator::new(self.rand(6200.0, 9800.0), 180.0, rate),
-                body: Resonator::new(self.rand(2800.0, 4200.0), 260.0, rate),
-                knock: 0.0,
-                knock_phase: 0.0,
-                knock_step: 0.0,
-                knock_decay: 0.0,
-                own: true,
-            };
-            self.take_voice(tink);
-            // And the piece rings, bright and brief, as glass does.
-            let freq = self.rand(2600.0, 5200.0);
-            let ring = Tone {
-                live: true,
-                wait: (wait * rate) as u32,
-                age: 0,
-                life: (0.6 * rate) as u32,
-                attack: (0.0008 * rate) as u32,
-                level: gain * 0.22,
-                env: 1.0,
-                decay: (-1.0 / (self.rand(0.09, 0.2) * rate)).exp(),
-                steps: GLASS.map(|(m, _)| std::f32::consts::TAU * freq * m / rate),
-                phases: [0.0; 3],
-                amps: GLASS.map(|(_, a)| a),
-                wobble: 0.0,
-                wobble_step: 0.0,
-            };
-            self.take_tone(ring);
+        // The glass landing, piece by piece: sharp, brittle ticks, each
+        // with a smaller one as it skitters, and the barest ring.
+        for k in 0..11 {
+            let wait = 0.42 + k as f32 * 0.03 + self.rand(0.0, 0.1);
+            let gain = self.rand(0.8, 1.5) * level;
+            for (bounce, (after, size)) in [(0.0, 1.0), (self.rand(0.03, 0.08), 0.4)]
+                .into_iter()
+                .enumerate()
+            {
+                let g = gain * size;
+                let tick = Voice {
+                    live: true,
+                    wait: ((wait + after) * rate) as u32,
+                    age: 0,
+                    left: g * angle.cos(),
+                    right: g * angle.sin(),
+                    strike: 1.0,
+                    strike_decay: (-1.0 / (0.00025 * rate)).exp(),
+                    ring: Resonator::new(self.rand(7000.0, 11000.0), 420.0, rate),
+                    body: Resonator::new(self.rand(3800.0, 5600.0), 500.0, rate),
+                    knock: 0.0,
+                    knock_phase: 0.0,
+                    knock_step: 0.0,
+                    knock_decay: 0.0,
+                    own: true,
+                };
+                self.take_voice(tick);
+                if bounce > 0 || k % 2 == 1 {
+                    continue;
+                }
+                // Every other piece rings, bright and over in a moment.
+                let freq = self.rand(4200.0, 7200.0);
+                let ring = Tone {
+                    live: true,
+                    wait: (wait * rate) as u32,
+                    age: 0,
+                    life: (0.15 * rate) as u32,
+                    attack: (0.0005 * rate) as u32,
+                    level: gain * 0.1,
+                    env: 1.0,
+                    decay: (-1.0 / (self.rand(0.02, 0.045) * rate)).exp(),
+                    steps: GLASS.map(|(m, _)| std::f32::consts::TAU * freq * m / rate),
+                    phases: [0.0; 3],
+                    amps: GLASS.map(|(_, a)| a),
+                    wobble: 0.0,
+                    wobble_step: 0.0,
+                };
+                self.take_tone(ring);
+            }
         }
     }
 
@@ -538,13 +548,12 @@ mod tests {
                 .iter()
                 .fold(0.0f32, |m, x| m.max(x.abs()))
         };
-        // The crack, a quiet moment, the glass landing and ringing on a
-        // while, then silence.
+        // The crack, a quiet moment, the glass landing in a brittle
+        // scatter, then silence.
         assert!(peak(0.0, 0.05) > 0.2);
         assert!(peak(0.2, 0.4) < 0.01);
         assert!(peak(0.4, 0.75) > 0.02);
-        assert!(peak(0.95, 1.05) > 0.0);
-        assert!(peak(1.9, 2.0) == 0.0);
+        assert!(peak(1.2, 2.0) == 0.0);
         assert!(out.iter().all(|x| x.is_finite() && x.abs() <= 1.0));
         // To the right of the board, louder on the right.
         let (l, r) = out.chunks(2).fold((0.0f32, 0.0f32), |(l, r), f| {
