@@ -111,4 +111,5 @@ domain); `tools/cities.py` turns it into `src/cities.rs`.
 Thanks to Oscar, who asked for unlimited places, hand-set times, colours and
 regions, then tested them all and found the colour you couldn't paste, and
 then for most of 1.1 and 1.2. Thanks to Craig and Nicholas, who tested the
-first Mac version.
+first Mac version, and to Andrew, who found the clock needed a much better
+list of places to search.

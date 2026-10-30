@@ -2,9 +2,8 @@
 # Cargo.toml) that hasn't been released yet. Bump the version, add its
 # section to CHANGELOG.md, push to main: the release `vX.Y.Z` appears with
 # the Windows exe, the Linux binary, the Mac app, the user guide and
-# BEER MONEY.TXT, and
-# that section as its notes. A change to BEER MONEY.TXT alone refreshes it
-# on the latest release.
+# BEER MONEY.TXT, and that section as its notes. A change to the guide, the
+# changelog or BEER MONEY.TXT alone refreshes them on the latest release.
 
 name: Release
 
@@ -16,6 +15,8 @@ on:
       - CHANGELOG.md
       - .github/workflows/release.yml
       - BEER MONEY.TXT
+      - "Split-Flap Clock User Guide*"
+      - tools/release_notes.sh
   workflow_dispatch:
 
 concurrency:
@@ -109,19 +110,7 @@ jobs:
           cp "BEER MONEY.TXT" dist/beer-money.txt
       - name: Release notes from CHANGELOG.md
         run: |
-          ver="${{ needs.version.outputs.version }}"
-          awk -v v="$ver" 'index($0, "## " v " ") == 1 {f=1; next} f && /^## / {exit} f' CHANGELOG.md > notes.md
-          cat >> notes.md <<'NOTES'
-
-          ## Downloads
-
-          - **Windows**: `splitflap-clock.exe`. Download it and run it; nothing to install.
-          - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
-          - **Mac**: `splitflap-clock-mac.zip`, for Apple silicon and Intel Macs. Unzip it, drag the app into Applications, and the first time right-click it and choose Open: it isn't signed by Apple. Its read-me has the rest.
-          - **User guide**: `splitflap-clock-user-guide.html`. Open it in any web browser.
-          - **User guide as PDFs**: `splitflap-clock-user-guide-dark.pdf` and `splitflap-clock-user-guide-light.pdf`.
-          - **Beer money**: `beer-money.txt`. The other Timster's Audio Works apps, and how to shout the developer a beer.
-          NOTES
+          tools/release_notes.sh "${{ needs.version.outputs.version }}" > notes.md
           cat notes.md
       - name: Create the release
         env:
@@ -135,8 +124,9 @@ jobs:
             --title "Split-Flap Clock $ver" \
             --notes-file notes.md
 
-  # A release that's out already still gets the latest BEER MONEY.TXT.
-  beer-money:
+  # A release that's out already still gets the latest user guide, notes
+  # and BEER MONEY.TXT, when they change: say, a new name in the thanks.
+  refresh:
     needs: version
     if: github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'true'
     runs-on: ubuntu-24.04
@@ -144,10 +134,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Add BEER MONEY.TXT to the release
+      - name: Refresh the guide, notes and beer money on the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp "BEER MONEY.TXT" beer-money.txt
-          gh release upload "v${{ needs.version.outputs.version }}" beer-money.txt \
-            --repo "$GITHUB_REPOSITORY" --clobber
+          ver="${{ needs.version.outputs.version }}"
+          mkdir dist
+          cp "Split-Flap Clock User Guide.html" dist/splitflap-clock-user-guide.html
+          cp "Split-Flap Clock User Guide (dark).pdf" dist/splitflap-clock-user-guide-dark.pdf
+          cp "Split-Flap Clock User Guide (light).pdf" dist/splitflap-clock-user-guide-light.pdf
+          cp "BEER MONEY.TXT" dist/beer-money.txt
+          gh release upload "v$ver" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          tools/release_notes.sh "$ver" > notes.md
+          gh release edit "v$ver" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
