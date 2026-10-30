@@ -10,6 +10,7 @@
 
 - **Find places by city**: search for any of over 7,000 cities and towns, by name ("Manchester", "São Paulo"), by name and country ("Paris, France"), or by country ("New Zealand" lists its cities, biggest first), as well as by time zone. A place added from a city takes the city's name, and its sky card goes by the city's own sunrise and sunset.
 - The glass of a blown bulb lands in a brittle scatter: sharp ticks, each with a smaller one as it skitters, and only the briefest ring.
+- **The janitor**: when a blown bulb is replaced, a broom comes along the foot of the board and sweeps its glass off the nearer end, a stroke at a time.
 - **Dimmer** for the lamps, on the Effects page, from 25% to 160%, with **Normal** to go back.
 - **Bulb sounds** have a volume of their own on the Effects page, and play whether the clatter is on or not (Off turns them off). The glass landing is louder, next to the pop.
 - A blown bulb's smoke is a thin trail now, carried off sideways by the draught, mostly across the board, and gone in a few seconds.

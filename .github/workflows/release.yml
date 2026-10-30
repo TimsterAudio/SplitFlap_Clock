@@ -1,7 +1,8 @@
 # Publishes a GitHub release whenever main carries a version (from
 # Cargo.toml) that hasn't been released yet. Bump the version, add its
 # section to CHANGELOG.md, push to main: the release `vX.Y.Z` appears with
-# the Windows exe, the Linux binary, the user guide and BEER MONEY.TXT, and
+# the Windows exe, the Linux binary, the Mac app, the user guide and
+# BEER MONEY.TXT, and
 # that section as its notes. A change to BEER MONEY.TXT alone refreshes it
 # on the latest release.
 
@@ -69,8 +70,26 @@ jobs:
           path: dist/*
           retention-days: 7
 
+  mac:
+    needs: version
+    if: needs.version.outputs.exists == 'false'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - run: cargo build --release --target aarch64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
+      - run: tools/mac_app.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-mac
+          path: dist/*
+          retention-days: 7
+
   publish:
-    needs: [version, build]
+    needs: [version, build, mac]
     if: github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'false'
     runs-on: ubuntu-24.04
     permissions:
@@ -98,6 +117,7 @@ jobs:
 
           - **Windows**: `splitflap-clock.exe`. Download it and run it; nothing to install.
           - **Linux**: `splitflap-clock-linux-x86_64`. Download it, `chmod +x` it and run it.
+          - **Mac**: `splitflap-clock-mac.zip`, for Apple silicon and Intel Macs. Unzip it, drag the app into Applications, and the first time right-click it and choose Open: it isn't signed by Apple. Its read-me has the rest.
           - **User guide**: `splitflap-clock-user-guide.html`. Open it in any web browser.
           - **User guide as PDFs**: `splitflap-clock-user-guide-dark.pdf` and `splitflap-clock-user-guide-light.pdf`.
           - **Beer money**: `beer-money.txt`. The other Timster's Audio Works apps, and how to shout the developer a beer.

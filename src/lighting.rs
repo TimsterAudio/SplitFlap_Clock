@@ -3,8 +3,9 @@
 //! fading away below. Once in a while, a bulb flickers, then either comes
 //! good or blows: a flash and a pop, a wisp of smoke, and its glass falling
 //! to the foot of the board, its part of the board in shadow until it's
-//! replaced: after a while by itself, or by hand, by clicking it, which
-//! sweeps up the glass too.
+//! replaced: after a while by itself, or by hand, by clicking it; and the
+//! janitor comes along the foot of the board with a broom and sweeps the
+//! glass off the nearer end.
 //!
 //! The light is drawn over the finished board: a fine grid, darkened where
 //! the lamps don't reach and warmed where they do, so it falls on the cards,
@@ -197,6 +198,39 @@ struct Glass {
     lamp: usize,
     at: f64,
     shards: Vec<Shard>,
+    /// Being swept away, since when, and which way: -1 to the left, 1 to
+    /// the right.
+    swept: Option<(f64, f32)>,
+}
+
+/// How fast the broom goes, a share of the board's width a second.
+const BROOM_SPEED: f32 = 0.22;
+
+impl Glass {
+    /// Where the broom is, across the board, `t` seconds into the sweep:
+    /// from just behind the pile, out past the nearer end, in strokes.
+    fn broom(&self, n: f32, t: f32, way: f32) -> f32 {
+        let centre = (self.lamp as f32 + 0.5) / n;
+        let start = centre - way * 0.5 / n;
+        let stroke = 0.012 * (t * std::f32::consts::TAU * 1.8).sin();
+        start + way * (BROOM_SPEED * t + stroke)
+    }
+
+    /// Whether the sweep is done at `time`: the broom and the glass gone
+    /// off the end of the board.
+    fn swept_away(&self, n: f32, time: f64) -> bool {
+        match self.swept {
+            Some((since, way)) => {
+                let x = self.broom(n, (time - since) as f32, way);
+                if way > 0.0 {
+                    x > 1.12
+                } else {
+                    x < -0.12
+                }
+            }
+            None => false,
+        }
+    }
 }
 
 /// A puff of a blown bulb's smoke, carried off sideways by the draught.
@@ -325,7 +359,7 @@ impl Lighting {
                     } else if time >= until {
                         // A new bulb, which sputters for a moment on, and
                         // the glass swept up.
-                        self.glass.retain(|g| g.lamp != i);
+                        self.sweep(i, time);
                         let until = time + self.rng.between(0.3, 1.2);
                         lamp.state = State::Flicker {
                             until,
@@ -346,10 +380,15 @@ impl Lighting {
         // Smoke drifts and clears; glass falls.
         self.smoke.retain(|p| time - p.born < p.life as f64);
         self.flashes.retain(|(_, at)| time - at < 0.5);
-        self.glass.retain(|g| g.lamp < n);
+        let lamps = n.max(1) as f32;
+        self.glass
+            .retain(|g| g.lamp < n && !g.swept_away(lamps, time));
         busy |= !self.smoke.is_empty()
             || !self.flashes.is_empty()
-            || self.glass.iter().any(|g| time - g.at < (FALL + 0.3) as f64);
+            || self
+                .glass
+                .iter()
+                .any(|g| time - g.at < (FALL + 0.3) as f64 || g.swept.is_some());
         busy
     }
 
@@ -413,6 +452,7 @@ impl Lighting {
             lamp: i,
             at: time,
             shards,
+            swept: None,
         });
         let mut r = |lo: f32, hi: f32| self.rng.between(lo as f64, hi as f64) as f32;
         // The draught takes the smoke one way or the other, a thin trail
@@ -472,15 +512,28 @@ impl Lighting {
     pub fn replace(&mut self, i: usize, time: f64) -> bool {
         match self.lamps.get_mut(i) {
             Some(lamp) if matches!(lamp.state, State::Dead { .. }) => {
-                self.glass.retain(|g| g.lamp != i);
                 lamp.state = State::Flicker {
                     until: time + self.rng.between(0.3, 1.2),
                     next: time,
                     dies: false,
                 };
+                self.sweep(i, time);
                 true
             }
             _ => false,
+        }
+    }
+
+    /// Sends the janitor for lamp `i`'s glass: swept off the nearer end of
+    /// the board.
+    fn sweep(&mut self, i: usize, time: f64) {
+        let n = self.lamps.len().max(1) as f32;
+        for g in self.glass.iter_mut().filter(|g| g.lamp == i) {
+            if g.swept.is_none() {
+                let centre = (i as f32 + 0.5) / n;
+                let way = if centre < 0.5 { -1.0 } else { 1.0 };
+                g.swept = Some((time, way));
+            }
         }
     }
 
@@ -610,16 +663,31 @@ impl Lighting {
         // catching what light there is.
         for g in &self.glass {
             let centre = (g.lamp as f32 + 0.5) / n;
+            // Where the broom is, if the janitor's at work.
+            let broom = g.swept.map(|(since, way)| {
+                let t = (time - since) as f32;
+                (g.broom(n, t, way), way, t)
+            });
             for sh in &g.shards {
                 let t = (time - g.at) as f32 - sh.delay;
                 if t < 0.0 {
                     continue;
                 }
                 let s = (t / FALL).min(1.0);
-                let x = centre + (sh.x * (0.3 + 0.7 * s) + sh.drift * s) / n;
+                let mut x = centre + (sh.x * (0.3 + 0.7 * s) + sh.drift * s) / n;
                 let top = 0.03;
-                let y = top + (sh.y - top) * s * s;
-                let angle = sh.angle + sh.spin * (1.0 - s);
+                let mut y = top + (sh.y - top) * s * s;
+                let mut angle = sh.angle + sh.spin * (1.0 - s);
+                // Pushed along in front of the broom, skittering as it goes.
+                if let Some((bx, way, _)) = broom {
+                    let front = bx + way * (0.018 + sh.size * 0.8);
+                    let pushed = if way > 0.0 { front - x } else { x - front };
+                    if pushed > 0.0 {
+                        x = front;
+                        y -= 0.006 * (pushed * 90.0).sin().abs();
+                        angle += pushed * sh.spin * 3.0;
+                    }
+                }
                 let size = sh.size * rect.height();
                 let middle = at(x, y);
                 let points: Vec<Pos2> = sh
@@ -651,8 +719,56 @@ impl Lighting {
                     ));
                 }
             }
+            if let Some((bx, way, t)) = broom {
+                let lit = self.light(&look, bx.clamp(0.0, 1.0), 0.95).0;
+                draw_broom(painter, rect, bx, way, (t / 0.25).min(1.0), lit);
+            }
         }
     }
+}
+
+/// The janitor's broom at `x` across the foot of the board at `rect`,
+/// pushing `way` (-1 left, 1 right), its handle leaning back the other way;
+/// `fade` from 0 to 1 as it comes into view, in `lit` light.
+fn draw_broom(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f32) {
+    let shade = |c: [u8; 3]| {
+        let k = 0.35 + 0.65 * lit;
+        Color32::from_rgba_unmultiplied(
+            (c[0] as f32 * k) as u8,
+            (c[1] as f32 * k) as u8,
+            (c[2] as f32 * k) as u8,
+            (fade * 255.0) as u8,
+        )
+    };
+    let foot = rect.max.y - 1.0;
+    let cx = rect.min.x + rect.width() * x;
+    let w = (rect.width() * 0.05).max(14.0);
+    let h = (rect.height() * 0.04).max(7.0);
+    // The handle, from the head up and back.
+    let neck = egui::pos2(cx - way * w * 0.1, foot - h * 1.15);
+    let grip = neck + egui::vec2(-way * w * 1.5, -rect.height() * 0.3);
+    painter.line_segment(
+        [neck, grip],
+        egui::Stroke::new((w * 0.11).max(2.0), shade([118, 80, 44])),
+    );
+    // The head, a wooden block with the bristles under it, splayed by the
+    // push.
+    let block = Rect::from_min_max(
+        egui::pos2(cx - w * 0.45, foot - h * 1.25),
+        egui::pos2(cx + w * 0.45, foot - h * 0.85),
+    );
+    painter.rect_filled(block, 2.0, shade([92, 62, 36]));
+    let splay = -way * w * 0.12;
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            egui::pos2(cx - w * 0.42, foot - h * 0.85),
+            egui::pos2(cx + w * 0.42, foot - h * 0.85),
+            egui::pos2(cx + w * 0.5 + splay, foot),
+            egui::pos2(cx - w * 0.5 + splay, foot),
+        ],
+        shade([186, 150, 82]),
+        egui::Stroke::NONE,
+    ));
 }
 
 /// A colour to add on top, rather than paint over: premultiplied, with no
@@ -785,8 +901,21 @@ mod tests {
         assert!(l.smoke.is_empty());
         assert_eq!(l.glass.len(), 1);
         assert_eq!(l.dead(), dead);
-        // A new bulb sweeps the glass up.
+        // A new bulb, and the janitor sweeps the glass away: it's still
+        // there while the broom is at work, then gone.
         assert!(l.replace(dead[0], t));
+        assert_eq!(l.glass.len(), 1);
+        assert!(l.glass[0].swept.is_some());
+        let mut t2 = t;
+        while t2 < t + 2.0 {
+            assert!(l.update(3, t2, Failures::Sometimes, Replace::ByHand));
+            t2 += 0.05;
+        }
+        assert_eq!(l.glass.len(), 1, "still sweeping");
+        while t2 < t + 8.0 {
+            l.update(3, t2, Failures::Sometimes, Replace::ByHand);
+            t2 += 0.05;
+        }
         assert!(l.glass.is_empty());
     }
 
