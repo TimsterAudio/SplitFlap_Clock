@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The user guide covers it all: the new Settings window page by page (Gate 05), moods, finding places by city and dragging them about, the alarm list, the dimmer, bulbs that blow, and bulb sounds.
+
 - **Moving a place** refreshes the board from the first row that changed down: from where it went, moving up, or from where it left, moving down. The rows above stay as they are.
 - **Removing an alarm** from its line in Settings, without opening it: the cross asks "Remove this alarm?" first.
 - The smoke is lighter and the draught carries it away quicker.

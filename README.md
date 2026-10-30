@@ -14,7 +14,9 @@ departures.
 - Day and night: a card showing morning, day, evening or night at each place, from its own sunrise and sunset
 - The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
-- Alarms, announced by the board with an airport chime, by your time or any place's, with a 9-minute snooze
+- Alarms, announced by the board with an airport chime, by your time or any place's, each with its own reason and colour, with a 9-minute snooze
+- Lighting: warm lamps over the board, with a dimmer, whose bulbs flicker and now and then blow, with a pop, smoke and broken glass, until they're replaced
+- Moods: Classic, Terminal 1975, Last flight out and Quiet library, each a whole look in one click
 - Can start when you log in
 - Optional sound: the clatter of the cards at start-up and on refreshes, with the clock itself kept quiet
 - One file: no installer, no runtime, nothing downloaded while it runs
@@ -37,17 +39,19 @@ The guide is built from `docs/guide`.
   ⚙ in the corner) to open Settings.
 - **Drag** the face to move the window. Resize the window, or use the Size
   slider in Settings; the board keeps its shape.
-- Add places in Settings by searching for a city, such as `Tokyo` or
-  `New York`, and pressing **Add**. Edit the name shown on the board, give it
-  a region and a colour, set its time by hand if you like, and move places
-  and regions up and down.
+- Settings has pages down the side (Clock, Places, Alarms, Effects, Window
+  and About) and a live preview of the board along the top.
+- Add places by searching for any of over 7,000 cities, such as `Tokyo`,
+  `Paris, France` or a whole country, or a time zone, and pressing **Add**.
+  Open a place to change its name, region, colour or time, and drag places
+  and regions to move them.
 
 **Start when I log in** adds the clock to the Windows Run list (it shows in
 Task Manager's Startup apps) or writes `~/.config/autostart/splitflap-clock.desktop`
 on Linux. **Show on all desktops** works on Windows 10 and 11 virtual desktops,
 where it also hides the taskbar button, and on Linux desktops with workspaces.
 
-Settings are saved when the clock closes: in `%APPDATA%\splitflap-clock` on
+Settings are saved when the clock closes, and every so often while it runs: in `%APPDATA%\splitflap-clock` on
 Windows and `~/.local/share/splitflap-clock` on Linux.
 
 On Linux the program needs an X11 or Wayland desktop with OpenGL, and ALSA
