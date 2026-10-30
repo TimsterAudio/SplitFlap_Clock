@@ -1,29 +1,18 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 – 2026-10-30
 
-- The user guide covers it all: the new Settings window page by page (Gate 05), moods, finding places by city and dragging them about, the alarm list, the dimmer, bulbs that blow, and bulb sounds.
-
-- **Moving a place** refreshes the board from the first row that changed down: from where it went, moving up, or from where it left, moving down. The rows above stay as they are.
-- **Removing an alarm** from its line in Settings, without opening it: the cross asks "Remove this alarm?" first.
-- The smoke is lighter and the draught carries it away quicker.
-
-- **Find places by city**: search for any of over 7,000 cities and towns, by name ("Manchester", "São Paulo"), by name and country ("Paris, France"), or by country ("New Zealand" lists its cities, biggest first), as well as by time zone. A place added from a city takes the city's name, and its sky card goes by the city's own sunrise and sunset.
-- The glass of a blown bulb lands in a brittle scatter: sharp ticks, each with a smaller one as it skitters, and only the briefest ring.
-- **The janitor**: when a blown bulb is replaced, a broom comes along the foot of the board and sweeps its glass off the nearer end, a stroke at a time.
-- **Dimmer** for the lamps, on the Effects page, from 25% to 160%, with **Normal** to go back.
-- **Bulb sounds** have a volume of their own on the Effects page, and play whether the clatter is on or not (Off turns them off). The glass landing is louder, next to the pop.
-- A blown bulb's smoke is a thin trail now, carried off sideways by the draught, mostly across the board, and gone in a few seconds.
-
-- **Bulbs blow properly now**: a white-hot flash and a pop (with the clatter sound on), a wisp of smoke that spreads under the top of the board and clears, and the bulb's glass falling to the foot of the board, where it lies, glinting, until the bulb is replaced. Replacing it sweeps up the glass.
-- Bulbs can **Fail about every hour**, and **Blow one now**, on the Effects page, sets one off straight away. **Last flight out** now fails bulbs every hour or so.
-
-- **A new Settings window**, easier to read and find your way around. Pages down the side: **Clock**, **Places** and **Alarms** for the basics, **Effects** for the show, and **Window and About**. A live preview of the board along the top shows each change as you make it, including the place or alarm you're changing. Every setting says what it does, with switches and buttons instead of tick boxes.
+- **A new Settings window**, easier to read and to find your way around. Pages down the side: **Clock**, **Places** and **Alarms** for the basics, **Effects** for the show, and **Window and About**. A live preview of the board along the top shows each change as you make it, including the place or alarm you're changing. Every setting says what it does, with switches and buttons instead of tick boxes.
 - **Moods** on the Effects page: **Classic**, **Terminal 1975**, **Last flight out** and **Quiet library** each set the lamps, sound, refresh, flip speed and cards in one go, to fine-tune from there.
-- **Places**: drag a place by its handle to move it, into another region too, or drag a region's heading to move the whole group. Click a place to change its name, region, colour or time.
-- **Alarms**: each on one line with its time, days and colour; click one to change it.
-
+- **Find places by city**: search for any of over 7,000 cities and towns, by name ("Manchester", "São Paulo"), by name and country ("Paris, France"), or by country ("New Zealand" lists its cities, biggest first), as well as by time zone. A place added from a city takes the city's name, and its sky card goes by the city's own sunrise and sunset.
+- **Places**: drag a place by its handle to move it, into another region too, or drag a region's heading to move the whole group. The board refreshes from the first row that changed down: from where a place went, moving up, or from where it left, moving down; the rows above stay as they are. Click a place to change its name, region, colour or time.
+- **Alarms**: each on one line with its time, days and colour; click one to change it, or its cross to remove it ("Remove this alarm?" first).
+- **Bulbs blow properly**: a white-hot flash and a pop, a thin trail of smoke carried off by the draught, and the glass falling to the foot of the board in a brittle scatter, where it lies, glinting, until the bulb is replaced. Then **the janitor** comes along the foot of the board with a broom and sweeps the glass off the nearer end, a stroke at a time.
+- Bulbs can **Fail about every hour**, and **Blow one now** sets one off straight away. **Bulb sounds** have a volume of their own, and play whether the clatter is on or not.
+- **Dimmer** for the lamps, from 25% to 160%, with **Normal** to go back.
+- **Split-Flap Clock for Mac**: each release now has a Mac app too, for Apple silicon and Intel Macs. Thanks to Craig and Nicholas for testing it. On a Mac, Start when I log in makes a login item, and Show on all desktops is the Dock's: Options, Assign To, All Desktops.
 - Each release carries `beer-money.txt` too: the other Timster's Audio Works apps, and how to shout the developer a beer.
+- The user guide covers it all: the new Settings window page by page (Gate 05), moods, finding and moving places, the alarm list, the dimmer, bulbs that blow and the janitor, bulb sounds, and the Mac. Oscar, Craig and Nicholas are in the acknowledgements.
 
 ## 1.1.0 – 2026-10-29
 

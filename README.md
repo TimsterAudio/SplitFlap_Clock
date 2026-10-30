@@ -15,17 +15,20 @@ departures.
 - The board refreshes now and then: every card spins once round and lands back, like a real board (every hour by default, every 15 or 30 minutes, or at random within a range you choose)
 - Keep on top, show on all desktops, and an optional frameless window to sit on the desktop
 - Alarms, announced by the board with an airport chime, by your time or any place's, each with its own reason and colour, with a 9-minute snooze
-- Lighting: warm lamps over the board, with a dimmer, whose bulbs flicker and now and then blow, with a pop, smoke and broken glass, until they're replaced
+- Lighting: warm lamps over the board, with a dimmer, whose bulbs flicker and now and then blow, with a pop, smoke and broken glass, until they're replaced and the janitor sweeps up
 - Moods: Classic, Terminal 1975, Last flight out and Quiet library, each a whole look in one click
 - Can start when you log in
 - Optional sound: the clatter of the cards at start-up and on refreshes, with the clock itself kept quiet
-- One file: no installer, no runtime, nothing downloaded while it runs
+- Windows, Linux and Mac
+- One file (an app on the Mac): no installer, no runtime, nothing downloaded while it runs
 
 ## Using it
 
 Download it from [Releases](https://github.com/TimsterAudio/SplitFlap_Clock/releases/latest):
-`splitflap-clock.exe` for Windows, or `splitflap-clock-linux-x86_64` for Linux
-(make it executable with `chmod +x`). Then run it.
+`splitflap-clock.exe` for Windows, `splitflap-clock-linux-x86_64` for Linux
+(make it executable with `chmod +x`), or `splitflap-clock-mac.zip` for a Mac
+(drag the app into Applications, and the first time right-click it and choose
+Open: it isn't signed by Apple). Then run it.
 
 **New to it?** Open **`Split-Flap Clock User Guide.html`** ("Split-Flap Clock
 for Dummies"): everything on the board and in Settings explained, with
@@ -65,13 +68,22 @@ libraries at run time.
 
 Bump `version` in `Cargo.toml` and add its section to `CHANGELOG.md`, then
 push to `main`. The Release workflow creates the `vX.Y.Z` tag and the release
-with both downloads.
+with the Windows, Linux and Mac downloads, the user guide and `beer-money.txt`.
 
 ## Building
 
 ```sh
 cargo build --release                                     # Linux (needs libasound2-dev)
 cargo build --release --target x86_64-pc-windows-gnu      # Windows, from Linux with MinGW
+```
+
+On a Mac, build for both kinds of Mac and make the app with
+`tools/mac_app.sh`:
+
+```sh
+cargo build --release --target aarch64-apple-darwin
+cargo build --release --target x86_64-apple-darwin
+tools/mac_app.sh out                                      # out/splitflap-clock-mac.zip
 ```
 
 On Windows itself, `cargo build --release` builds the exe. The binary is in
@@ -97,4 +109,6 @@ The list of cities to search for places by comes from the
 domain); `tools/cities.py` turns it into `src/cities.rs`.
 
 Thanks to Oscar, who asked for unlimited places, hand-set times, colours and
-regions, then tested them all and found the colour you couldn't paste.
+regions, then tested them all and found the colour you couldn't paste, and
+then for most of 1.1 and 1.2. Thanks to Craig and Nicholas, who tested the
+first Mac version.

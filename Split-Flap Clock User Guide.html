@@ -297,13 +297,13 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
 <section id="p2">
   <h2><span class="pn">Gate 02</span> Up and clacking in under a minute</h2>
   <ol class="steps">
-    <li><b>Collect your ticket.</b> On the clock's GitHub page, under <b>Releases</b>, download <code>splitflap-clock.exe</code> for Windows, or <code>splitflap-clock-linux-x86_64</code> for Linux.</li>
-    <li><b>Check in.</b> There's nothing to install. On Windows, double-click the exe. On Linux, make the file executable once (<code>chmod +x splitflap-clock-linux-x86_64</code>, or tick "Allow executing" in its properties) and then run it.</li>
+    <li><b>Collect your ticket.</b> On the clock's GitHub page, under <b>Releases</b>, download <code>splitflap-clock.exe</code> for Windows, <code>splitflap-clock-linux-x86_64</code> for Linux, or <code>splitflap-clock-mac.zip</code> for a Mac.</li>
+    <li><b>Check in.</b> There's nothing to install. On Windows, double-click the exe. On Linux, make the file executable once (<code>chmod +x splitflap-clock-linux-x86_64</code>, or tick "Allow executing" in its properties) and then run it. On a Mac, unzip it and drag <b>Split-Flap Clock</b> into Applications.</li>
     <li><b>Watch the board come in.</b> Every card starts blank, then they all set off at once, a moment apart and each at its own speed, until the time and the date settle into place.</li>
     <li><b>Look up.</b> Feel faintly nostalgic for a decade you may not have lived through. That's normal.</li>
   </ol>
   <p class="ic warning"><b>SECURITY ANNOUNCEMENT</b> Windows may say it "protected your PC" from an unrecognised app the first time. The clock isn't signed by a big company, so SmartScreen hasn't heard of it. Click <b>More info</b>, then <b>Run anyway</b>. It only asks once.</p>
-  <p class="ic remember"><b>PLEASE NOTE</b> There has also been a test build for the Mac, for a few brave passengers. It's an app rather than a single file, and the first time it needs a right-click and <b>Open</b>, as Apple hasn't signed it. If you have one, its read-me says the rest.</p>
+  <p class="ic warning"><b>SECURITY ANNOUNCEMENT</b> On a Mac, Apple hasn't signed the clock either, so the first time, right-click it and choose <b>Open</b>, then <b>Open</b> again. (On newer macOS, try to open it once, then go to System Settings, Privacy &amp; Security, and click <b>Open Anyway</b>.) If macOS insists it's damaged, the read-me in the zip has a one-line fix.</p>
   <p class="ic tip"><b>PASSENGER INFORMATION</b> The clock is a single file. Put it somewhere you'll keep it, such as a Programs or Apps folder, rather than leaving it in Downloads, especially if you're going to have it start when you log in (Gate 14).</p>
 </section>
 
@@ -352,7 +352,7 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
     <dt>Settings</dt><dd>Double-click the face, choose it from the menu, or click the small <b>⚙</b> that appears in the top right corner when the pointer is over the clock. Settings opens in its own window, right beside the clock: to its right, or to its left if the clock is near the edge of the screen. Its pages are down the left side, and along the top is a little copy of the board that shows every change as you make it. Changes take effect straight away; there's no OK button to forget. Gate 05 goes through it page by page.</dd>
   </dl>
   <p class="ic tip"><b>PASSENGER INFORMATION</b> <b>Hide title bar</b> turns the clock into a bare black slab that sits on your desktop like the real thing. You can still drag it about by its face. To make it bigger or smaller without the window edges, use <b>Size</b>.</p>
-  <p class="ic remember"><b>PLEASE NOTE</b> Settings are saved when the clock closes, and every so often while it runs, and loaded next time it starts. They live in <code>%APPDATA%\splitflap-clock</code> on Windows and <code>~/.local/share/splitflap-clock</code> on Linux. Updating to a new version keeps them.</p>
+  <p class="ic remember"><b>PLEASE NOTE</b> Settings are saved when the clock closes, and every so often while it runs, and loaded next time it starts. They live in <code>%APPDATA%\splitflap-clock</code> on Windows, <code>~/.local/share/splitflap-clock</code> on Linux, and <code>~/Library/Application Support/splitflap-clock</code> on a Mac. Updating to a new version keeps them.</p>
 </section>
 
 <section id="p5">
@@ -519,9 +519,11 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
   <p><b>Bulb sounds</b> sets how loud the pop and the glass are, on their own: they play whether the clatter is on or not, and <b>Off</b> silences them.</p>
   <h3>Replacing them</h3>
   <dl>
-    <dt>Replaced for you</dt><dd>The usual, with <b>Replace by hand</b> off. Someone comes round with a new bulb after a minute or so, sweeps up the glass, and the new one sputters on.</dd>
-    <dt>Replace by hand</dt><dd>A dead bulb stays out, and its glass stays where it fell, until you do something about it, even if you close the clock and start it again. Move the pointer over the dark lamp at the top of the board: it turns into a hand and says <b>Click to put in a new bulb</b>. Click, and the glass is swept up and the new one sputters and comes on. Or right-click the clock and choose <b>Replace the dead bulb</b> (or <b>Replace the 2 dead bulbs</b>, if you've let things slide).</dd>
+    <dt>Replaced for you</dt><dd>The usual, with <b>Replace by hand</b> off. Someone comes round with a new bulb after a minute or so, and the new one sputters on.</dd>
+    <dt>Replace by hand</dt><dd>A dead bulb stays out, and its glass stays where it fell, until you do something about it, even if you close the clock and start it again. Move the pointer over the dark lamp at the top of the board: it turns into a hand and says <b>Click to put in a new bulb</b>. Click, and the new one sputters and comes on. Or right-click the clock and choose <b>Replace the dead bulb</b> (or <b>Replace the 2 dead bulbs</b>, if you've let things slide).</dd>
   </dl>
+  <h3>The janitor</h3>
+  <p>A new bulb is only half the job. Once it's in, the janitor comes along the foot of the board with a broom, from behind the heap of glass, and sweeps it off the nearer end of the board, a stroke at a time, the pieces skittering ahead of the bristles. Then he's gone, and so is the glass. Good help is hard to find; this one never misses a shard.</p>
   <p class="ic tip"><b>PASSENGER INFORMATION</b> <b>Evening</b> lamps with <b>Card brightness</b> turned up is the easiest dim board to read: the lamps set the mood and the lighter cards keep the letters crisp. The <b>Last flight out</b> mood does just that.</p>
   <p class="ic remember"><b>PLEASE NOTE</b> The lighting is only a look. A dark patch never hides the time: the cards under a dead bulb still flip, just in shadow. If the whole board looks dim, turn the <b>Dimmer</b> up, or the lamps <b>Off</b>.</p>
   <p class="ic tech"><b>CREW ONLY</b> The bulbs behave like filaments: they take a few hundredths of a second to warm up and cool down, which is why a flicker looks like a stutter rather than a switch. The light is drawn over the finished board, so it falls on the cards, their letters and the board alike. The pop and the glass are made as they play, like the clatter, and are heard from the side of the board the bulb was on.</p>
@@ -601,12 +603,13 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
 <section id="p14">
   <h2><span class="pn">Gate 14</span> Login, desktops and other ground handling</h2>
   <h3>Start when I log in</h3>
-  <p>Switch it on in Settings (Window and About) and the clock starts with you every time you log in. On Windows it appears under Startup apps in Task Manager, where you can also switch it off. On Linux it adds an entry to <code>~/.config/autostart</code>. If you move the clock's file to another folder, the entry is updated the next time you run it from there.</p>
+  <p>Switch it on in Settings (Window and About) and the clock starts with you every time you log in. On Windows it appears under Startup apps in Task Manager, where you can also switch it off. On Linux it adds an entry to <code>~/.config/autostart</code>, and on a Mac a login item in <code>~/Library/LaunchAgents</code>. If you move the clock's file to another folder, the entry is updated the next time you run it from there.</p>
   <h3>Show on all desktops</h3>
   <p>If you use more than one virtual desktop or workspace, this keeps the clock on every one of them, so it's there wherever you switch to.</p>
   <ul>
     <li><b>Windows 10 and 11:</b> the clock has no taskbar button while this is on, and doesn't appear in <kbd>Alt</kbd>+<kbd>Tab</kbd>. That's the price Windows asks for being on every desktop. Right-click the clock to get at it.</li>
     <li><b>Linux:</b> it asks the desktop to keep the clock on every workspace, in the standard way that desktops with workspaces understand.</li>
+    <li><b>Mac:</b> the Dock decides. Right-click the clock in the Dock, then <b>Options</b>, <b>Assign To</b>, <b>All Desktops</b>.</li>
   </ul>
   <h3>Keep on top</h3>
   <p>Keeps the clock above other windows, like a board above a busy hall. These three, <b>Keep on top</b>, <b>Hide title bar</b> and <b>Show on all desktops</b>, are on the Window and About page, and in the right-click menu too.</p>
@@ -640,6 +643,12 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
   <dl class="trouble">
     <dt>Windows won't open it ("Windows protected your PC")</dt>
     <dd>Click <b>More info</b>, then <b>Run anyway</b>. The clock isn't signed, so SmartScreen doesn't recognise it.</dd>
+    <dt>Mac: it won't open, or says it's damaged</dt>
+    <dd>Right-click it and choose <b>Open</b>, or use <b>Open Anyway</b> in System Settings, Privacy &amp; Security. If it says it's damaged, open Terminal and run <code>xattr -cr "/Applications/Split-Flap Clock.app"</code>, then open it again.</dd>
+    <dt>Mac: no ⚙ in the corner</dt>
+    <dd>On a Mac, use the right-click menu or a double-click for Settings instead.</dd>
+    <dt>Mac: Show on all desktops does nothing</dt>
+    <dd>On a Mac, that's the Dock's job: right-click the clock in the Dock, then <b>Options</b>, <b>Assign To</b>, <b>All Desktops</b>.</dd>
     <dt>Linux: nothing happens when I open it</dt>
     <dd>Make the file executable first: <code>chmod +x splitflap-clock-linux-x86_64</code>. It also needs a desktop with OpenGL, and ALSA for sound, which every ordinary desktop has, PipeWire and PulseAudio ones included.</dd>
     <dt>The time is wrong</dt>
@@ -716,6 +725,7 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
     <dt>Flap</dt><dd>One hinged leaf, carrying the top half of one symbol and the bottom half of the next.</dd>
     <dt>Sky card</dt><dd>The card showing morning, day, evening or night at a place, from its sunrise and sunset.</dd>
     <dt>Lamp</dt><dd>One of the warm lights over the board, when the lamps are on. Its bulb can flicker, or blow.</dd>
+    <dt>Janitor</dt><dd>Never seen, but his broom is: it sweeps a blown bulb's glass away once the bulb is replaced.</dd>
     <dt>Mood</dt><dd>A whole look in one click, on the Effects page: lamps, sound, refreshes, flip speed and cards together.</dd>
     <dt>Dimmer</dt><dd>How bright the lamps are, from a quarter to 160%.</dd>
     <dt>Preview</dt><dd>The little board along the top of Settings, showing your changes as you make them.</dd>
@@ -734,7 +744,8 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
 
 <section class="thanks">
   <h2>Acknowledgements</h2>
-  <p>Special thanks to <b>Oscar</b>, our most particular passenger. He asked for unlimited places, times set by hand, colours for everything, and regions to sort them into. Then he tested the lot and spotted that you could copy a colour but not paste one. Then he asked for the sky, the reasons, the dates, the white cards, the buttons, the flip speed and the card brightness. And then for bulbs that blow, with glass and smoke, and a dimmer to see them by. Much of version 1 is his doing, and nearly all of 1.1 and 1.2. Every board needs someone who reads it properly.</p>
+  <p>Special thanks to <b>Oscar</b>, our most particular passenger. He asked for unlimited places, times set by hand, colours for everything, and regions to sort them into. Then he tested the lot and spotted that you could copy a colour but not paste one. Then he asked for the sky, the reasons, the dates, the white cards, the buttons, the flip speed and the card brightness. And then for bulbs that blow, with glass and smoke, a dimmer to see them by, and a janitor to sweep up after them. Much of version 1 is his doing, and nearly all of 1.1 and 1.2. Every board needs someone who reads it properly.</p>
+  <p>Thanks too to <b>Craig</b> and <b>Nicholas</b>, who took the first Mac version for a spin on the very latest macOS and reported back: sound, keeping on top, the bare slab, every desktop and the Settings window all present and correct. The Mac version is here because of them.</p>
   <p><b>Beer money.</b> If you like Split-Flap Clock and want to support its developer with some beer funding, send it via PayPal to <code>spoolbeermoney@outlook.com</code>. There's a <b>Beer money</b> button in Settings too, under Window and About. Cheers!</p>
 </section>
 
