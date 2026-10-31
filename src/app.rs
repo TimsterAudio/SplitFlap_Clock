@@ -675,8 +675,8 @@ pub struct ClockApp {
     applied_on_top: Option<bool>,
     applied_frameless: Option<bool>,
     /// When to set the window's size again, after the title bar came or
-    /// went.
-    refit_at: Option<f64>,
+    /// went: first a pixel bigger, so it's sure to be a change, then back.
+    refit_at: Option<(f64, bool)>,
     applied_all_desktops: bool,
     desktops_error: Option<String>,
     /// Whether the clock starts at login, as the system has it.
@@ -1009,7 +1009,7 @@ impl ClockApp {
                 // bar. Setting the size again, now and in a moment, makes it
                 // tell.
                 self.fitted = None;
-                self.refit_at = Some(ctx.input(|i| i.time) + 0.3);
+                self.refit_at = Some((ctx.input(|i| i.time) + 0.3, true));
             }
         }
     }
@@ -1017,9 +1017,16 @@ impl ClockApp {
     /// Fits the window to the board when the board changes shape, and
     /// remembers the size the user drags it to.
     fn fit_window(&mut self, ctx: &egui::Context, board: Vec2, window: Vec2, time: f64) {
-        if self.refit_at.is_some_and(|at| time >= at) {
-            self.refit_at = None;
-            self.fitted = None;
+        if let Some((_, bigger)) = self.refit_at.filter(|(at, _)| time >= *at) {
+            if bigger {
+                let size = self.fit_size(ctx, board) + vec2(1.0, 1.0);
+                ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
+                self.resized_at = time;
+                self.refit_at = Some((time + 0.15, false));
+            } else {
+                self.refit_at = None;
+                self.fitted = None;
+            }
         }
         if self.fitted != Some(board) {
             self.fitted = Some(board);
@@ -1032,6 +1039,13 @@ impl ClockApp {
     }
 
     fn resize(&mut self, ctx: &egui::Context, board: Vec2, time: f64) {
+        let size = self.fit_size(ctx, board);
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
+        self.resized_at = time;
+    }
+
+    /// The window's size for `board`, at the clock's size.
+    fn fit_size(&self, ctx: &egui::Context, board: Vec2) -> Vec2 {
         let mut size = board * self.saved.scale;
         // A long list of cities mustn't make the window taller than the
         // screen; the board shrinks to fit instead.
@@ -1040,8 +1054,7 @@ impl ClockApp {
                 .min(screen.y * 0.9 / size.y)
                 .min(1.0);
         }
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size.round()));
-        self.resized_at = time;
+        size.round()
     }
 
     /// Whether the board is due a refresh: on the hour for an hourly one,
@@ -1558,6 +1571,25 @@ const CLINK: &str = r"            \   |   /
 (__|  o     |  |     o  |__)
    |________|  |________|";
 
+/// Whether the clock was last set to hide its title bar, read before its
+/// window opens, so that it opens that way, rather than losing its title
+/// bar a moment later: Windows doesn't always tell the window how big it
+/// has become when it does.
+pub fn starts_frameless() -> bool {
+    let read = || -> Option<bool> {
+        let dir = eframe::storage_dir(APP_ID)?;
+        let text = std::fs::read_to_string(dir.join("app.ron")).ok()?;
+        let all: HashMap<String, String> = ron::from_str(&text).ok()?;
+        let saved: Saved = ron::from_str(all.get(eframe::APP_KEY)?).ok()?;
+        Some(saved.frameless)
+    };
+    read().unwrap_or(false)
+}
+
+/// The clock's name to the system, which names the folder its settings
+/// are kept in.
+pub const APP_ID: &str = "splitflap-clock";
+
 /// "Split-Flap Clock 1.1.0, released 29 Oct 2026", from the version and
 /// the date the changelog gives it (see build.rs).
 fn version_text() -> String {
@@ -1893,6 +1925,28 @@ mod tests {
         assert_eq!(parse_colour("1, 2"), None);
         assert_eq!(parse_colour("orange"), None);
         assert_eq!(hex([255, 136, 0]), "#FF8800");
+    }
+
+    #[test]
+    fn the_window_opens_without_its_title_bar_if_it_was_hidden() {
+        // Settings as eframe keeps them, in a folder of their own.
+        let dir = std::env::temp_dir().join(format!("flap-test-{}", std::process::id()));
+        std::env::set_var("XDG_DATA_HOME", &dir);
+        if !cfg!(target_os = "linux") {
+            return;
+        }
+        let folder = eframe::storage_dir(APP_ID).unwrap();
+        std::fs::create_dir_all(&folder).unwrap();
+        assert!(!starts_frameless());
+        let saved = Saved {
+            frameless: true,
+            ..Saved::default()
+        };
+        let mut all = HashMap::new();
+        all.insert(eframe::APP_KEY.to_string(), ron::to_string(&saved).unwrap());
+        std::fs::write(folder.join("app.ron"), ron::to_string(&all).unwrap()).unwrap();
+        assert!(starts_frameless());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

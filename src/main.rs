@@ -19,7 +19,8 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Split-Flap Clock")
-            .with_app_id("splitflap-clock")
+            .with_app_id(app::APP_ID)
+            .with_decorations(!app::starts_frameless())
             .with_inner_size([520.0, 260.0])
             .with_min_inner_size([160.0, 80.0])
             .with_icon(egui::IconData {

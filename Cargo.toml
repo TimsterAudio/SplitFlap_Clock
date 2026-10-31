@@ -19,6 +19,7 @@ serde = { version = "1", features = ["derive"] }
 raw-window-handle = "0.6"
 cpal = "0.18"
 rtrb = "0.4"
+ron = "0.12"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", default-features = false, features = ["x11"] }
@@ -36,5 +37,3 @@ strip = true
 [build-dependencies]
 winresource = "0.1"
 
-[dev-dependencies]
-ron = "0.12"

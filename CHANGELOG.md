@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now sets its size again just after, so Windows tells it how big it really is.
+- Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now opens without its title bar if it was hidden, instead of losing it a moment after opening, and when you hide or show it, nudges its size so Windows tells it how big it really is.
 
 ## 1.2.0 – 2026-10-30
 
