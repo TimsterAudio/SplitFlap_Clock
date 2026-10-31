@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The janitor has a hand brush** now, at Oscar's suggestion: a short wooden one with dark bristles, kept low along the foot of the board, instead of a broom.
+- Test builds say so at the foot of Settings: "a test build", rather than the date of the release they follow.
 - Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now opens without its title bar if it was hidden, instead of losing it a moment after opening, and when you hide or show it, nudges its size so Windows tells it how big it really is.
 
 ## 1.2.0 – 2026-10-30

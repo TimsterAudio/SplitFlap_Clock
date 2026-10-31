@@ -4,8 +4,8 @@
 //! good or blows: a flash and a pop, a wisp of smoke, and its glass falling
 //! to the foot of the board, its part of the board in shadow until it's
 //! replaced: after a while by itself, or by hand, by clicking it; and the
-//! janitor comes along the foot of the board with a broom and sweeps the
-//! glass off the nearer end.
+//! janitor comes along the foot of the board with a hand brush and sweeps
+//! the glass off the nearer end.
 //!
 //! The light is drawn over the finished board: a fine grid, darkened where
 //! the lamps don't reach and warmed where they do, so it falls on the cards,
@@ -203,25 +203,25 @@ struct Glass {
     swept: Option<(f64, f32)>,
 }
 
-/// How fast the broom goes, a share of the board's width a second.
-const BROOM_SPEED: f32 = 0.22;
+/// How fast the brush goes, a share of the board's width a second.
+const BRUSH_SPEED: f32 = 0.22;
 
 impl Glass {
-    /// Where the broom is, across the board, `t` seconds into the sweep:
+    /// Where the brush is, across the board, `t` seconds into the sweep:
     /// from just behind the pile, out past the nearer end, in strokes.
-    fn broom(&self, n: f32, t: f32, way: f32) -> f32 {
+    fn brush(&self, n: f32, t: f32, way: f32) -> f32 {
         let centre = (self.lamp as f32 + 0.5) / n;
         let start = centre - way * 0.5 / n;
         let stroke = 0.012 * (t * std::f32::consts::TAU * 1.8).sin();
-        start + way * (BROOM_SPEED * t + stroke)
+        start + way * (BRUSH_SPEED * t + stroke)
     }
 
-    /// Whether the sweep is done at `time`: the broom and the glass gone
+    /// Whether the sweep is done at `time`: the brush and the glass gone
     /// off the end of the board.
     fn swept_away(&self, n: f32, time: f64) -> bool {
         match self.swept {
             Some((since, way)) => {
-                let x = self.broom(n, (time - since) as f32, way);
+                let x = self.brush(n, (time - since) as f32, way);
                 if way > 0.0 {
                     x > 1.12
                 } else {
@@ -663,10 +663,10 @@ impl Lighting {
         // catching what light there is.
         for g in &self.glass {
             let centre = (g.lamp as f32 + 0.5) / n;
-            // Where the broom is, if the janitor's at work.
-            let broom = g.swept.map(|(since, way)| {
+            // Where the brush is, if the janitor's at work.
+            let brush = g.swept.map(|(since, way)| {
                 let t = (time - since) as f32;
-                (g.broom(n, t, way), way, t)
+                (g.brush(n, t, way), way, t)
             });
             for sh in &g.shards {
                 let t = (time - g.at) as f32 - sh.delay;
@@ -678,8 +678,8 @@ impl Lighting {
                 let top = 0.03;
                 let mut y = top + (sh.y - top) * s * s;
                 let mut angle = sh.angle + sh.spin * (1.0 - s);
-                // Pushed along in front of the broom, skittering as it goes.
-                if let Some((bx, way, _)) = broom {
+                // Pushed along in front of the brush, skittering as it goes.
+                if let Some((bx, way, _)) = brush {
                     let front = bx + way * (0.018 + sh.size * 0.8);
                     let pushed = if way > 0.0 { front - x } else { x - front };
                     if pushed > 0.0 {
@@ -719,18 +719,19 @@ impl Lighting {
                     ));
                 }
             }
-            if let Some((bx, way, t)) = broom {
+            if let Some((bx, way, t)) = brush {
                 let lit = self.light(&look, bx.clamp(0.0, 1.0), 0.95).0;
-                draw_broom(painter, rect, bx, way, (t / 0.25).min(1.0), lit);
+                draw_brush(painter, rect, bx, way, (t / 0.25).min(1.0), lit);
             }
         }
     }
 }
 
-/// The janitor's broom at `x` across the foot of the board at `rect`,
-/// pushing `way` (-1 left, 1 right), its handle leaning back the other way;
-/// `fade` from 0 to 1 as it comes into view, in `lit` light.
-fn draw_broom(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f32) {
+/// The janitor's hand brush at `x` across the foot of the board at
+/// `rect`, pushing `way` (-1 left, 1 right): a pale wooden back with its
+/// handle running out behind, and dark bristles under the head, splayed by
+/// the push. `fade` from 0 to 1 as it comes into view, in `lit` light.
+fn draw_brush(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f32) {
     let shade = |c: [u8; 3]| {
         let k = 0.35 + 0.65 * lit;
         Color32::from_rgba_unmultiplied(
@@ -740,35 +741,69 @@ fn draw_broom(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f
             (fade * 255.0) as u8,
         )
     };
+    let p = egui::pos2;
     let foot = rect.max.y - 1.0;
     let cx = rect.min.x + rect.width() * x;
-    let w = (rect.width() * 0.05).max(14.0);
-    let h = (rect.height() * 0.04).max(7.0);
-    // The handle, from the head up and back.
-    let neck = egui::pos2(cx - way * w * 0.1, foot - h * 1.15);
-    let grip = neck + egui::vec2(-way * w * 1.5, -rect.height() * 0.3);
-    painter.line_segment(
-        [neck, grip],
-        egui::Stroke::new((w * 0.11).max(2.0), shade([118, 80, 44])),
-    );
-    // The head, a wooden block with the bristles under it, splayed by the
-    // push.
-    let block = Rect::from_min_max(
-        egui::pos2(cx - w * 0.45, foot - h * 1.25),
-        egui::pos2(cx + w * 0.45, foot - h * 0.85),
-    );
-    painter.rect_filled(block, 2.0, shade([92, 62, 36]));
-    let splay = -way * w * 0.12;
+    // The head's length, the bristles' depth, and the wood's thickness.
+    let w = (rect.width() * 0.055).max(16.0);
+    let hb = (rect.height() * 0.045).max(8.0);
+    let t = (hb * 0.42).max(3.0);
+    let top = foot - hb;
+    let front = cx + way * w * 0.5;
+    let back = cx - way * w * 0.5;
+    let end = back - way * w * 0.85;
+    // The bristles, fanning out a little to the floor and swept back by
+    // the push, with a few lighter hairs among them.
+    let splay = -way * w * 0.1;
     painter.add(egui::Shape::convex_polygon(
         vec![
-            egui::pos2(cx - w * 0.42, foot - h * 0.85),
-            egui::pos2(cx + w * 0.42, foot - h * 0.85),
-            egui::pos2(cx + w * 0.5 + splay, foot),
-            egui::pos2(cx - w * 0.5 + splay, foot),
+            p(cx - w * 0.47, top),
+            p(cx + w * 0.47, top),
+            p(cx + w * 0.55 + splay, foot),
+            p(cx - w * 0.55 + splay, foot),
         ],
-        shade([186, 150, 82]),
+        shade([54, 54, 56]),
         egui::Stroke::NONE,
     ));
+    for k in 0..9 {
+        let f = (k as f32 + 0.5) / 9.0 - 0.5;
+        painter.line_segment(
+            [
+                p(cx + f * w * 0.9, top + 1.0),
+                p(cx + f * w * 1.06 + splay, foot),
+            ],
+            egui::Stroke::new(0.7, shade([128, 128, 130])),
+        );
+    }
+    // The wooden back and its handle, rising gently as it runs out behind,
+    // with a hanging hole near its rounded end.
+    let rise = t * 0.9;
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            p(front, top),
+            p(front, top - t),
+            p(end, top - t - rise),
+            p(end, top - rise * 0.55),
+            p(back, top),
+        ],
+        shade([214, 180, 130]),
+        egui::Stroke::NONE,
+    ));
+    painter.circle_filled(
+        p(end, top - t * 0.5 - rise * 0.8),
+        t * 0.5,
+        shade([214, 180, 130]),
+    );
+    // Light along its top edge, as in the picture.
+    painter.line_segment(
+        [p(front, top - t + 0.8), p(end, top - t - rise + 0.8)],
+        egui::Stroke::new(1.0, shade([240, 214, 170])),
+    );
+    painter.circle_filled(
+        p(end + way * t * 0.35, top - t * 0.5 - rise * 0.8),
+        (t * 0.16).max(1.0),
+        shade([70, 50, 30]),
+    );
 }
 
 /// A colour to add on top, rather than paint over: premultiplied, with no
@@ -902,7 +937,7 @@ mod tests {
         assert_eq!(l.glass.len(), 1);
         assert_eq!(l.dead(), dead);
         // A new bulb, and the janitor sweeps the glass away: it's still
-        // there while the broom is at work, then gone.
+        // there while the brush is at work, then gone.
         assert!(l.replace(dead[0], t));
         assert_eq!(l.glass.len(), 1);
         assert!(l.glass[0].swept.is_some());

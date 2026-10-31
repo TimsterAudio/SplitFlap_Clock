@@ -21,16 +21,22 @@ fn main() {
 }
 
 /// Tells the app the date its version was released, from the changelog's
-/// "## X.Y.Z – YYYY-MM-DD" heading, or nothing for a version not released.
+/// "## X.Y.Z – YYYY-MM-DD" heading, or nothing for a version not released,
+/// or a test build of changes since, with an Unreleased section on top.
 fn release_date() {
     println!("cargo:rerun-if-changed=CHANGELOG.md");
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
     let changelog = std::fs::read_to_string("CHANGELOG.md").unwrap_or_default();
+    let unreleased = changelog
+        .lines()
+        .find(|l| l.starts_with("## "))
+        .is_some_and(|l| l.trim() == "## Unreleased");
     let date = changelog
         .lines()
         .find_map(|l| l.strip_prefix(&format!("## {version} ")))
         .and_then(|rest| rest.split_whitespace().last())
         .unwrap_or("");
+    let date = if unreleased { "" } else { date };
     println!("cargo:rustc-env=RELEASE_DATE={date}");
 }
 
