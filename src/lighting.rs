@@ -204,16 +204,54 @@ struct Glass {
 }
 
 /// How fast the brush goes, a share of the board's width a second.
-const BRUSH_SPEED: f32 = 0.22;
+const BRUSH_SPEED: f32 = 0.2;
+/// Its strokes: how far each pushes forward and draws back, a share of the
+/// board's width, and how many a second.
+const STROKE: f32 = 0.032;
+const STROKES: f32 = 1.5;
+
+/// How far along its way the brush is, `t` seconds into the sweep, as a
+/// share of the board's width: a push forward, a short draw back, and
+/// another push, gaining a little each time.
+fn sweep_progress(t: f32) -> f32 {
+    BRUSH_SPEED * t + STROKE * (t * std::f32::consts::TAU * STROKES).sin()
+}
+
+/// How fast the brush is going `t` seconds in: below nothing on a draw
+/// back.
+fn sweep_speed(t: f32) -> f32 {
+    let w = std::f32::consts::TAU * STROKES;
+    BRUSH_SPEED + STROKE * w * (t * w).cos()
+}
+
+/// The farthest the brush has pushed by `t`: where the glass it moved
+/// lies, as it stays put while the brush draws back.
+fn sweep_reach(t: f32) -> f32 {
+    // The stroke turns back where its speed comes to nothing going
+    // forward; each turn is farther on than the last, so the farthest yet
+    // is now or the last turn.
+    let tau = std::f32::consts::TAU;
+    let w = tau * STROKES;
+    let c = -BRUSH_SPEED / (STROKE * w);
+    let now = sweep_progress(t).max(0.0);
+    if c < -1.0 {
+        return now;
+    }
+    let turn = c.acos();
+    let k = ((w * t - turn) / tau).floor();
+    if k < 0.0 {
+        return now;
+    }
+    now.max(sweep_progress((turn + tau * k) / w))
+}
 
 impl Glass {
-    /// Where the brush is, across the board, `t` seconds into the sweep:
-    /// from just behind the pile, out past the nearer end, in strokes.
-    fn brush(&self, n: f32, t: f32, way: f32) -> f32 {
+    /// Where the brush is across the board, a progress of `p` along its
+    /// way: from just behind the pile, out past the nearer end.
+    fn brush(&self, n: f32, p: f32, way: f32) -> f32 {
         let centre = (self.lamp as f32 + 0.5) / n;
         let start = centre - way * 0.5 / n;
-        let stroke = 0.012 * (t * std::f32::consts::TAU * 1.8).sin();
-        start + way * (BRUSH_SPEED * t + stroke)
+        start + way * p
     }
 
     /// Whether the sweep is done at `time`: the brush and the glass gone
@@ -221,7 +259,7 @@ impl Glass {
     fn swept_away(&self, n: f32, time: f64) -> bool {
         match self.swept {
             Some((since, way)) => {
-                let x = self.brush(n, (time - since) as f32, way);
+                let x = self.brush(n, sweep_reach((time - since) as f32), way);
                 if way > 0.0 {
                     x > 1.12
                 } else {
@@ -664,9 +702,12 @@ impl Lighting {
         for g in &self.glass {
             let centre = (g.lamp as f32 + 0.5) / n;
             // Where the brush is, if the janitor's at work.
+            // Where the brush is now, and the farthest it has pushed.
             let brush = g.swept.map(|(since, way)| {
                 let t = (time - since) as f32;
-                (g.brush(n, t, way), way, t)
+                let now = g.brush(n, sweep_progress(t), way);
+                let reach = g.brush(n, sweep_reach(t), way);
+                (now, reach, way, t)
             });
             for sh in &g.shards {
                 let t = (time - g.at) as f32 - sh.delay;
@@ -679,12 +720,16 @@ impl Lighting {
                 let mut y = top + (sh.y - top) * s * s;
                 let mut angle = sh.angle + sh.spin * (1.0 - s);
                 // Pushed along in front of the brush, skittering as it goes.
-                if let Some((bx, way, _)) = brush {
-                    let front = bx + way * (0.018 + sh.size * 0.8);
+                // Pushed along by the brush's farthest stroke so far, and left
+                // there as it draws back; skittering while it's pushing.
+                if let Some((bx, reach, way, t)) = brush {
+                    let front = reach + way * (0.018 + sh.size * 0.8);
                     let pushed = if way > 0.0 { front - x } else { x - front };
                     if pushed > 0.0 {
                         x = front;
-                        y -= 0.006 * (pushed * 90.0).sin().abs();
+                        if (bx - reach).abs() < 0.002 && sweep_speed(t) > 0.0 {
+                            y -= 0.006 * (pushed * 90.0).sin().abs();
+                        }
                         angle += pushed * sh.spin * 3.0;
                     }
                 }
@@ -719,19 +764,24 @@ impl Lighting {
                     ));
                 }
             }
-            if let Some((bx, way, t)) = brush {
+            if let Some((bx, _, way, t)) = brush {
                 let lit = self.light(&look, bx.clamp(0.0, 1.0), 0.95).0;
-                draw_brush(painter, rect, bx, way, (t / 0.25).min(1.0), lit);
+                // Going forward or drawing back, and how hard.
+                let speed = sweep_speed(t) / (STROKE * std::f32::consts::TAU * STROKES);
+                draw_brush(painter, rect, bx, way, speed, (t / 0.25).min(1.0), lit);
             }
         }
     }
 }
 
 /// The janitor's hand brush at `x` across the foot of the board at
-/// `rect`, pushing `way` (-1 left, 1 right): a pale wooden back with its
-/// handle running out behind, and dark bristles under the head, splayed by
-/// the push. `fade` from 0 to 1 as it comes into view, in `lit` light.
-fn draw_brush(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f32) {
+/// `rect`, sweeping `way` (-1 left, 1 right), its handle trailing behind,
+/// in the middle of a `stroke`: from 1, pushing hard, to -1, drawing back
+/// as fast as it goes: a pale
+/// wooden back with its handle running out behind, and dark bristles under
+/// the head, splayed by the stroke. Drawn back, it lifts a little off the
+/// floor. `fade` from 0 to 1 as it comes into view, in `lit` light.
+fn draw_brush(painter: &Painter, rect: Rect, x: f32, way: f32, stroke: f32, fade: f32, lit: f32) {
     let shade = |c: [u8; 3]| {
         let k = 0.35 + 0.65 * lit;
         Color32::from_rgba_unmultiplied(
@@ -742,19 +792,27 @@ fn draw_brush(painter: &Painter, rect: Rect, x: f32, way: f32, fade: f32, lit: f
         )
     };
     let p = egui::pos2;
-    let foot = rect.max.y - 1.0;
+    let going = way * stroke.signum();
+    let pace = stroke.abs().min(1.0);
     let cx = rect.min.x + rect.width() * x;
     // The head's length, the bristles' depth, and the wood's thickness.
     let w = (rect.width() * 0.055).max(16.0);
     let hb = (rect.height() * 0.045).max(8.0);
+    // Lifted a little off the floor as it's drawn back.
+    let lift = if going * way < 0.0 {
+        hb * 0.3 * pace
+    } else {
+        0.0
+    };
+    let foot = rect.max.y - 1.0 - lift;
     let t = (hb * 0.42).max(3.0);
     let top = foot - hb;
     let front = cx + way * w * 0.5;
     let back = cx - way * w * 0.5;
     let end = back - way * w * 0.85;
     // The bristles, fanning out a little to the floor and swept back by
-    // the push, with a few lighter hairs among them.
-    let splay = -way * w * 0.1;
+    // the stroke, either way, with a few lighter hairs among them.
+    let splay = -going * w * 0.1 * (0.3 + 0.7 * pace);
     painter.add(egui::Shape::convex_polygon(
         vec![
             p(cx - w * 0.47, top),
@@ -952,6 +1010,27 @@ mod tests {
             t2 += 0.05;
         }
         assert!(l.glass.is_empty());
+    }
+
+    #[test]
+    fn the_brush_sweeps_back_and_forth_but_the_glass_only_goes_one_way() {
+        let mut back = 0;
+        let mut last = (0.0, 0.0);
+        let mut t = 0.0;
+        while t < 4.0 {
+            let (now, reach) = (sweep_progress(t), sweep_reach(t));
+            if now < last.0 {
+                back += 1;
+            }
+            // The glass lies where the farthest stroke left it: it never
+            // comes back with the brush.
+            assert!(reach >= last.1 && reach >= now - 1e-6);
+            last = (now, reach);
+            t += 0.01;
+        }
+        assert!(back > 40, "it draws back now and then: {back}");
+        // And it gets there: about a fifth of the board a second.
+        assert!((0.7..0.9).contains(&sweep_reach(4.0)));
     }
 
     #[test]
