@@ -1,0 +1,15 @@
+[package]
+name = "splitflap-graphics-test"
+version = "0.1.0"
+edition = "2021"
+description = "A test bench for Split-Flap Clock's black strip and off-target menu on older Windows laptops"
+publish = false
+
+[dependencies]
+eframe = { version = "0.36", default-features = false, features = ["glow", "wgpu", "default_fonts", "x11", "wayland"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

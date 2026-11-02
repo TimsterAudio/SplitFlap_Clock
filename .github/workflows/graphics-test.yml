@@ -1,0 +1,30 @@
+# Builds the graphics test bench for Windows, as a download on the run's
+# page (Actions, then the run, then Artifacts). It publishes nothing.
+
+name: Graphics test
+
+on:
+  push:
+    branches: [graphics-test]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo clippy -- -D warnings
+      - run: cargo build --release
+      - shell: bash
+        run: |
+          mkdir dist
+          cp target/release/splitflap-graphics-test.exe dist/
+          cp README.md "dist/READ ME.md"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splitflap-graphics-test-windows
+          path: dist/*
+          retention-days: 60
