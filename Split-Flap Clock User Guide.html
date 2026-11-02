@@ -195,7 +195,7 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
   </div>
   <h1>for Dummies<sup>*</sup></h1>
   <p class="tag">The unofficial, slightly cheeky passenger's guide to the desk clock that clacks like a 1970s airport.</p>
-  <p class="ver">For Split-Flap Clock <b>v1.2.0</b></p>
+  <p class="ver">For Split-Flap Clock <b>v1.2.1</b></p>
   <p class="fine">* Dummies not included. Clatter extremely included. Not affiliated with any famous yellow book series, any airline, any airport, or the Italian company whose departure boards taught a generation of travellers to look up and listen. We just really like them.</p>
   <div class="stripe"></div>
 </header>
@@ -645,6 +645,8 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
     <dd>Click <b>More info</b>, then <b>Run anyway</b>. The clock isn't signed, so SmartScreen doesn't recognise it.</dd>
     <dt>Mac: it won't open, or says it's damaged</dt>
     <dd>Right-click it and choose <b>Open</b>, or use <b>Open Anyway</b> in System Settings, Privacy &amp; Security. If it says it's damaged, open Terminal and run <code>xattr -cr "/Applications/Split-Flap Clock.app"</code>, then open it again.</dd>
+    <dt>Windows: a black strip where the title bar was, or the right-click menu picks the item below</dt>
+    <dd>Some older laptops, with old graphics drivers, don't take to a window without a title bar. Leave <b>Hide title bar</b> off on those: right-click the clock and untick it. Newer computers aren't affected.</dd>
     <dt>Mac: no ⚙ in the corner</dt>
     <dd>On a Mac, use the right-click menu or a double-click for Settings instead.</dd>
     <dt>Mac: Show on all desktops does nothing</dt>
@@ -746,6 +748,7 @@ linear-gradient(to bottom,transparent 25%,rgba(0,0,0,.5))}
   <h2>Acknowledgements</h2>
   <p>Special thanks to <b>Oscar</b>, our most particular passenger. He asked for unlimited places, times set by hand, colours for everything, and regions to sort them into. Then he tested the lot and spotted that you could copy a colour but not paste one. Then he asked for the sky, the reasons, the dates, the white cards, the buttons, the flip speed and the card brightness. And then for bulbs that blow, with glass and smoke, a dimmer to see them by, a janitor to sweep up after them, and a proper hand brush for the janitor. Much of version 1 is his doing, and nearly all of 1.1 and 1.2. Every board needs someone who reads it properly.</p>
   <p>Thanks too to <b>Craig</b> and <b>Nicholas</b>, who took the first Mac version for a spin on the very latest macOS and reported back: sound, keeping on top, the bare slab, every desktop and the Settings window all present and correct. The Mac version is here because of them.</p>
+  <p>And Craig again, for going above and beyond on Windows: finding that hiding the title bar left a black strip and sent the right-click menu one item astray, then testing one fix after another on a venerable 2013 laptop, at every display scaling, on two screens, restarting each time to be sure, until we'd all agreed it was the laptop's age talking. The clock is better for every round: it now opens without its title bar when it was hidden, and tells Windows its real size when you change it. Every board needs someone who reads it properly; it also needs someone who reports back when the letters land in the wrong place.</p>
   <p>And thanks to <b>my Dad</b>, who tried to add <b>Neath</b>, in Wales, couldn't find it, and said so: the clock needed a much better list of places than the world's time zones. Thanks to him it now knows over 7,000 cities and towns, and finds Manchester, São Paulo and the whole of New Zealand by name. Neath, alas, still isn't one of them. (Sorry, Dad. Add <b>Swansea</b>, just down the road, and rename it <b>NEATH</b>: the time is the same, and so, near enough, is the sunset.)</p>
   <p>Nor, while we're in Wales, is <b>Llanfair<wbr>pwllgwyngyll<wbr>gogerychwyrn<wbr>drobwll<wbr>llantysilio<wbr>gogogoch</b>, on Anglesey. Finding it is the least of the trouble. At 58 letters it would need nearly five rows of name cards to itself, and spinning that many flaps round their drums on every refresh would take considerable extra resources: a small power station, by our sums, just to keep the cards turning. It stays where it belongs, on the longest railway station sign in Britain.</p>
   <p><b>Beer money.</b> If you like Split-Flap Clock and want to support its developer with some beer funding, send it via PayPal to <code>spoolbeermoney@outlook.com</code>. There's a <b>Beer money</b> button in Settings too, under Window and About. Cheers!</p>

@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 – 2026-11-02
 
 - **The janitor has a hand brush** now, at Oscar's suggestion: a short wooden one with dark bristles, kept low along the foot of the board, instead of a broom. It sweeps back and forth: a push, a short draw back with the bristles lifted, and another push, the glass staying where each push left it.
 - Test builds say so at the foot of Settings: "a test build", rather than the date of the release they follow.
-- Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now opens without its title bar if it was hidden, instead of losing it a moment after opening, and when you hide or show it, nudges its size so Windows tells it how big it really is.
+- Fixed: on some Windows computers, hiding or showing the title bar left a black strip where it had been, and the right-click menu picked the item below the one under the pointer. The clock now opens without its title bar if it was hidden, instead of losing it a moment after opening, and when you hide or show it, nudges its size so Windows tells it how big it really is. Thanks to Craig for finding it, and for testing each fix. On a few older laptops it persists, down to their graphics drivers: the guide says what to do.
+- The user guide covers the hand brush and its strokes, says what to do about the title bar on older laptops, and thanks Craig for the Windows testing.
 
 ## 1.2.0 – 2026-10-30
 

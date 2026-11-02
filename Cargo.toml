@@ -1,6 +1,6 @@
 [package]
 name = "splitflap-clock"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "A desktop clock that looks like an airport split-flap departure board"
 publish = false
